@@ -24,6 +24,7 @@
     adminPinSet: false,
     isAdmin: false,
     adminToken: null,
+    accessKey: null,
     editingGameId: null,
   };
 
@@ -50,6 +51,15 @@
       else localStorage.removeItem("kats_admin_token");
     } catch (e) {}
   }
+  function loadAccessKey() {
+    try { return localStorage.getItem("kats_access_key") || null; } catch (e) { return null; }
+  }
+  function saveAccessKey(key) {
+    try {
+      if (key) localStorage.setItem("kats_access_key", key);
+      else localStorage.removeItem("kats_access_key");
+    } catch (e) {}
+  }
 
   // ---------- toast / banner ----------
   var toastTimer = null;
@@ -70,6 +80,7 @@
   function api(path, options) {
     options = options || {};
     var headers = Object.assign({ "Content-Type": "application/json" }, options.headers || {});
+    if (state.accessKey) headers["X-Access-Key"] = state.accessKey;
     if (options.admin && state.adminToken) headers.Authorization = "Bearer " + state.adminToken;
     return fetch(API_BASE + path, {
       method: options.method || "GET",
@@ -79,14 +90,21 @@
       return res.json().catch(function () { return {}; }).then(function (data) {
         if (!res.ok) {
           if (res.status === 401 && options.admin && state.isAdmin) {
-            // Session expired server-side — drop local admin state so the
-            // next click prompts for the PIN again instead of failing silently.
+            // Admin session expired server-side — drop local admin state so
+            // the next click prompts for the PIN again instead of failing silently.
             state.isAdmin = false;
             state.adminToken = null;
             saveAdminToken(null);
             applyAdminVisibility();
             renderGames();
             renderRoster();
+          } else if (res.status === 401 && !options.admin) {
+            // The shared access key is missing or wrong (never set, cleared,
+            // or rotated by an admin) — drop it and show the private-link
+            // gate instead of an empty/broken app.
+            state.accessKey = null;
+            saveAccessKey(null);
+            showGate();
           }
           var err = new Error((data && data.error) || "Request failed (" + res.status + ")");
           err.status = res.status;
@@ -386,7 +404,12 @@
   function closeGameForm() { $("#gameFormModal").hidden = true; }
 
   // ---------- data loading ----------
-  function loadState() {
+  // `background: true` is for the polling timer, once we're already
+  // unlocked: swallow errors into a banner rather than kicking the viewer
+  // back to the access gate over a transient blip. The initial/unlock call
+  // omits it so unlockWithKey() can react to a bad key.
+  function loadState(opts) {
+    opts = opts || {};
     return api("/api/state").then(function (data) {
       state.teamName = data.teamName || "Kats Rugby Club";
       state.adminPinSet = !!data.adminPinSet;
@@ -402,7 +425,11 @@
       $("#banner").hidden = true;
     }).catch(function (e) {
       console.error(e);
-      showBanner("Couldn't reach the check-in service. If you're the admin, confirm the Worker is deployed and API_BASE in check-in/app.js is set correctly.");
+      if (opts.background) {
+        showBanner("Couldn't reach the check-in service. If you're the admin, confirm the Worker is deployed and API_BASE in check-in/app.js is set correctly.");
+        return;
+      }
+      throw e;
     });
   }
 
@@ -561,7 +588,7 @@
       call.then(function () {
         closeGameForm();
         showToast(state.editingGameId ? "Fixture updated." : "Fixture added.");
-        loadState();
+        loadState({ background: true });
       }).catch(function (e) { err.textContent = e.message || "Couldn't save — try again."; });
     });
 
@@ -572,7 +599,7 @@
         .then(function () {
           closeGameForm();
           showToast("Fixture deleted.");
-          loadState();
+          loadState({ background: true });
         })
         .catch(function (e) { $("#gameFormError").textContent = e.message || "Couldn't delete — try again."; });
     });
@@ -587,6 +614,37 @@
     });
   }
 
+  // ---------- private-link gate ----------
+  function showGate(message) {
+    $("#appRoot").hidden = true;
+    $("#accessGate").hidden = false;
+    if (message) $("#accessGateError").textContent = message;
+  }
+  function hideGate() {
+    $("#accessGate").hidden = true;
+    $("#appRoot").hidden = false;
+  }
+
+  function unlockWithKey(key) {
+    key = (key || "").trim();
+    if (!key) return Promise.reject(new Error("Enter your access key."));
+    state.accessKey = key;
+    return loadState().then(function () {
+      // loadState() only resolves normally on a 2xx — a bad key rejects
+      // via api()'s 401 handling before we get here.
+      saveAccessKey(key);
+      hideGate();
+      if (!state.me) openWhoModal(false);
+      startPolling();
+    });
+  }
+
+  var pollTimer = null;
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(function () { loadState({ background: true }); }, POLL_MS);
+  }
+
   // ---------- init ----------
   function init() {
     state.me = loadMe();
@@ -596,11 +654,36 @@
     applyAdminVisibility();
     wireEvents();
 
-    loadState().then(function () {
-      if (!state.me) openWhoModal(false);
+    $("#accessGateForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var input = $("#accessGateInput");
+      $("#accessGateError").textContent = "";
+      unlockWithKey(input.value).catch(function (err) {
+        $("#accessGateError").textContent = err.status === 401 ? "That access key isn't right." : (err.message || "Couldn't connect — try again.");
+      });
     });
 
-    setInterval(loadState, POLL_MS);
+    // A shared link looks like .../check-in/?key=XXXX — grab it, remember
+    // it locally, and scrub it from the visible URL/history so it doesn't
+    // linger in the address bar or browser history.
+    var urlKey = new URLSearchParams(window.location.search).get("key");
+    if (urlKey) {
+      history.replaceState(null, "", window.location.pathname);
+      unlockWithKey(urlKey).catch(function (err) {
+        showGate(err.status === 401 ? "That link's access key isn't right — ask your admin for a fresh one." : "Couldn't connect — try again.");
+      });
+      return;
+    }
+
+    var storedKey = loadAccessKey();
+    if (storedKey) {
+      unlockWithKey(storedKey).catch(function () {
+        showGate(); // silently fall back to the gate; the 401 handler in api() already cleared the bad key
+      });
+      return;
+    }
+
+    showGate();
   }
 
   document.addEventListener("DOMContentLoaded", init);

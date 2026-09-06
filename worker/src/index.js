@@ -30,7 +30,7 @@ function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Access-Key",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -101,6 +101,15 @@ async function readJson(request) {
   }
 }
 
+// Constant-time-ish string compare so a wrong guess can't be timed
+// character-by-character. Overkill for this threat model, cheap to do right.
+function safeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -109,6 +118,19 @@ export default {
 
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders(origin) });
+    }
+
+    // ---------- private-link gate ----------
+    // The whole app — not just admin actions — is only reachable with the
+    // shared access key baked into the link the team is given. Without it,
+    // nobody gets so much as the roster or fixture list. Set with:
+    //   wrangler secret put ACCESS_KEY
+    if (!env.ACCESS_KEY) {
+      return json({ error: "Server not configured: run `wrangler secret put ACCESS_KEY` (see worker/README.md)." }, { status: 500 }, origin);
+    }
+    const providedKey = request.headers.get("X-Access-Key") || "";
+    if (!safeEqual(providedKey, env.ACCESS_KEY)) {
+      return json({ error: "Missing or incorrect access key." }, { status: 401 }, origin);
     }
 
     const path = url.pathname.replace(/\/+$/, "") || "/";

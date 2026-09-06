@@ -11,7 +11,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://www.katsrugbyclub.com/check-in/" />
   <meta property="og:image" content="https://www.katsrugbyclub.com/assets/img/kats-logo-on-photo.png" />
-  <meta name="robots" content="noindex" />
+  <meta name="robots" content="noindex, nofollow" />
   <link rel="canonical" href="https://www.katsrugbyclub.com/check-in/" />
   <meta name="theme-color" content="#056839" />
   <link rel="icon" type="image/x-icon" href="../assets/img/favicon.ico" />
@@ -46,6 +46,23 @@
   </header>
 
   <main>
+    <section id="accessGate" class="page-hero">
+      <div class="wrap" style="max-width:480px;">
+        <p class="eyebrow" style="color:rgba(255,255,255,0.85);">Private team page</p>
+        <h1>Team Check-In</h1>
+        <p>This page is only for the team — ask your captain/admin for the check-in link, or paste your access key below if you have one.</p>
+        <form id="accessGateForm" style="text-align:left; margin-top:22px;">
+          <div class="field" style="margin-bottom:10px;">
+            <label for="accessGateInput" style="color:rgba(255,255,255,0.85);">Access key</label>
+            <input id="accessGateInput" autocomplete="off" placeholder="Paste your access key" />
+          </div>
+          <p class="error-text" id="accessGateError" style="min-height:15px;"></p>
+          <button type="submit" class="btn btn-gold" style="width:100%;">Unlock</button>
+        </form>
+      </div>
+    </section>
+
+    <div id="appRoot" hidden>
     <section class="page-hero">
       <div class="wrap">
         <p class="eyebrow" style="color:rgba(255,255,255,0.85);">Squad Availability</p>
@@ -89,6 +106,7 @@
         </section>
       </div>
     </section>
+    </div>
   </main>
 
   <!-- WHO ARE YOU MODAL -->

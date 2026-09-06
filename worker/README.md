@@ -32,7 +32,21 @@ This prints a `database_id`. Copy it into `worker/wrangler.toml`, replacing
 wrangler d1 execute kats-checkin --remote --file=./schema.sql
 ```
 
-## 4. Deploy the Worker
+## 4. Set the private-link access key
+
+This is what keeps the page private — nobody sees so much as the roster or
+fixture list without it, not just admin actions. Generate a long random
+value and store it as a Worker secret (never committed to the repo):
+
+```bash
+# generates a random key and shows it to you — save it somewhere, you'll need it below
+python3 -c "import secrets; print(secrets.token_urlsafe(24))"
+
+wrangler secret put ACCESS_KEY
+# paste the generated value when prompted
+```
+
+## 5. Deploy the Worker
 
 ```bash
 wrangler deploy
@@ -46,10 +60,10 @@ in Cloudflare (e.g. `checkin-api.katsrugbyclub.com`) instead of the
 `workers.dev` URL — in the Cloudflare dashboard: Workers & Pages → your
 worker → Settings → Domains & Routes → Add → Custom Domain.
 
-## 5. Point the frontend at it
+## 6. Point the frontend at it
 
 Open `../check-in/app.js` and replace the `API_BASE` constant near the top
-with the URL from step 4:
+with the URL from step 5:
 
 ```js
 var API_BASE = "https://kats-checkin-api.your-subdomain.workers.dev";
@@ -60,12 +74,32 @@ If you're using a custom domain instead, also double check
 check-in page is served from (it defaults to `katsrugbyclub.com` and
 `www.katsrugbyclub.com`) — if not, add it and run `wrangler deploy` again.
 
-## 6. Publish the site
+## 7. Publish the site
 
 Commit the `API_BASE` change and push/merge as you normally deploy this
-repo (GitHub Pages, via `.github/workflows/static.yml`). Once live, open
-`/check-in/` and use the ⚙ icon to set your admin PIN — first person there
-sets it up for the whole team.
+repo (GitHub Pages, via `.github/workflows/static.yml`).
+
+## 8. Share the private link
+
+The link to send the team is the page URL with your access key from step 4
+tacked on:
+
+```
+https://www.katsrugbyclub.com/check-in/?key=PASTE_YOUR_KEY_HERE
+```
+
+The first time someone opens it, the page saves the key on their device and
+drops it from the visible URL. Nobody who only has the bare
+`/check-in/` URL (no `?key=...`) sees anything but a "this page is private"
+message — not the roster, not fixtures, nothing. Open it yourself once and
+use the ⚙ icon to set your admin PIN — first person there sets it up for
+the whole team (this is separate from the access key: the access key gets
+everyone in, the PIN additionally gates fixture/roster management).
+
+**If the link ever leaks** (posted somewhere public by mistake, someone
+who left the club still has it, etc.), rotate it: run `wrangler secret put
+ACCESS_KEY` again with a new value, `wrangler deploy`, and share the new
+link — the old one stops working immediately for everyone.
 
 ## Updating later
 

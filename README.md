@@ -45,12 +45,23 @@ a plain static page (`check-in/index.html` + `check-in/app.js`) talking to
 a small Cloudflare Worker + D1 database (`worker/`) — no accounts, no
 Claude/Google/other sign-in, just a normal webpage and a normal API.
 
-**Before this works, someone needs to deploy the Worker once** — it's not
-live yet. Full steps are in [`worker/README.md`](worker/README.md)
-(~5 minutes: create a D1 database, run the schema, `wrangler deploy`, then
-paste the resulting URL into `check-in/app.js`'s `API_BASE` constant).
-Until that's done, the check-in page will show a "couldn't reach the
-check-in service" banner.
+**It's private, not just unlisted.** The page isn't linked from the site's
+nav or anywhere else, and it's `noindex`ed — but on top of that, the Worker
+itself refuses every request (viewing the roster/fixtures included, not
+just admin actions) unless it carries a shared access key. Nobody who
+finds or guesses the bare `/check-in/` URL sees any team data; the actual
+link you hand out looks like `/check-in/?key=<long-random-string>`, which
+the page remembers on that device after the first visit. See "Share the
+private link" in [`worker/README.md`](worker/README.md) for how to
+generate that key and rotate it if it ever leaks.
+
+**Before any of this works, someone needs to deploy the Worker once** —
+it's not live yet. Full steps are in
+[`worker/README.md`](worker/README.md) (~5 minutes: create a D1 database,
+run the schema, set the access key, `wrangler deploy`, then paste the
+resulting URL into `check-in/app.js`'s `API_BASE` constant). Until that's
+done, the check-in page shows its private-link gate but nothing behind it
+will load.
 
 Once deployed, the first person to open the ⚙ icon on `/check-in/` sets an
 admin PIN for the team — that PIN (not a Claude/GitHub/Google account)
