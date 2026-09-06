@@ -15,7 +15,7 @@ dollars a year on any static host.
 ├── history.html             History
 ├── join-our-team.html       Join Our Team
 ├── contact.html              Contact (full form + map)
-├── 2023-24-season.html      Fixtures & Results (live BC Rugby link-out + 2024/25 archive; filename kept from the live site's URL)
+├── 2023-24-season.html      Fixtures & Results (live BC Rugby link-out only; filename kept from the live site's URL)
 ├── assets/
 │   ├── css/style.css        Single shared stylesheet (brand colours, layout, responsive rules)
 │   ├── js/main.js           Mobile nav toggle + progressive-enhancement form submission
@@ -131,10 +131,9 @@ season even though the organisation page itself is correct and permanent.
   with headers `Content-Type: application/json`, `Origin: https://www.playhq.com`, and a normal
   browser `User-Agent` (PlayHQ's CDN blocks requests without those). Match on the `websiteUrl`
   field to make sure you've got the club's real record before trusting any ID it returns.
-- `2023-24-season.html`'s archived 2024/25 fixture list is a historical snapshot only — it is not
-  meant to be updated. If BC Rugby ever discontinues PlayHQ, replace the `.playhq-card` blocks
-  with a hand-maintained fixtures list again (the original `.fixtures-list`/`.fixture` markup and
-  CSS are still in `style.css` and used for the archive section, so nothing needs to be rebuilt).
+- `2023-24-season.html` no longer keeps a hand-maintained fixture list — it's just the link-out
+  card. If BC Rugby ever discontinues PlayHQ, the original `.fixtures-list`/`.fixture` markup and
+  CSS are still in `style.css` (unused now) and can be reused to add a fixtures table back.
 
 ## Diversity &amp; Inclusion (Safe Sport / Code of Conduct links)
 
@@ -237,10 +236,12 @@ In all three cases, no server-side config is needed — it's static HTML/CSS/JS/
 
 ## What was and wasn't captured
 
-**Captured:** full navigation (Home, About Us, History, Join Our Team, Contact, Fixtures &
-Results), all page text/copy, the club crest and every photo/opponent-crest image referenced on
-those pages, the contact address/phone/email, social links (Facebook, Instagram, Twitter), and
-the full 2024/25 fixtures & results list (15 rounds, scores where played).
+**Captured:** full navigation (Home, About Us, History, Join Our Team, Diversity & Inclusion,
+Contact, Fixtures & Results), all page text/copy, the club crest and every photo/opponent-crest
+image referenced on those pages, the contact address/phone/email, and social links (Facebook,
+Instagram, Twitter). The 2024/25 fixtures & results list (15 rounds) was originally kept as a
+historical archive on the Fixtures & Results page, but has since been removed at the club's
+request — that page now only links out to BC Rugby's live fixtures/results.
 
 **Not captured / needs manual attention:**
 - **`team-roster` page** — this URL exists on the live site (linked in its sitemap) but returned
@@ -264,8 +265,8 @@ the full 2024/25 fixtures & results list (15 rounds, scores where played).
   club appears to reuse last year's URL/page for each new season rather than creating a new one
   each year). Its content and nav label were changed from "2024/25 Fixtures & Results" to a
   season-agnostic "Fixtures & Results" (see the PlayHQ section above) specifically so it
-  **doesn't** need renaming every season anymore — PlayHQ is now the source of truth for the
-  current season, and this file's own fixture list is kept only as a labelled 2024/25 archive.
+  **doesn't** need renaming every season anymore — BC Rugby's site is now the source of truth for
+  the current season, and this page carries no fixture list of its own to keep updated.
 
 ## Manual steps for the club after migrating
 
