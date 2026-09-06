@@ -252,25 +252,25 @@ Two kinds of form appear on the site, matching the original:
    every page.
 2. A fuller contact form (name, address, email, phone, subject, message) on `contact.html`.
 
-Neither form has a real backend — **you must wire up your own endpoint before launching**. Every
-`<form>` currently points at:
+Both forms are wired to a live Formspree endpoint (`https://formspree.io/f/moeqnbpq`), on the
+club's free Formspree account:
 
 ```html
-<form action="https://formspree.io/f/YOUR_FORM_ID" method="POST" data-ajax-form>
+<form action="https://formspree.io/f/moeqnbpq" method="POST" data-ajax-form>
 ```
 
-To fix this:
+`assets/js/main.js` submits the form via `fetch` and shows an inline "Thanks for submitting!"
+message; the plain `<form action>` also works with JavaScript disabled (Formspree redirects to
+its own thank-you page in that case). The free tier is 50 submissions/month — plenty for a club
+contact form; Formspree's dashboard shows usage and lets you upgrade if that's ever not enough.
 
-1. Create a free account at [formspree.io](https://formspree.io) (100 submissions/month free) and
-   make a form.
-2. Replace every `YOUR_FORM_ID` in `index.html`, `about-us.html`, `history.html`,
-   `join-our-team.html`, `contact.html`, and `2023-24-season.html` with the ID Formspree gives you.
-3. That's it — `assets/js/main.js` submits the form via `fetch` and shows an inline "Thanks for
-   submitting!" message; the plain `<form action>` also works with JavaScript disabled (Formspree
-   redirects to its own thank-you page in that case).
-
-Any other static-friendly form backend (Netlify Forms, Basin, Getform, a Google Form, a serverless
-function you write yourself) works the same way — just change the `action` URL.
+**If the club ever needs to change where submissions go** (a different account, or the free tier
+is exceeded): create a new form at [formspree.io](https://formspree.io), then replace
+`moeqnbpq` with the new ID across `index.html`, `about-us.html`, `history.html`,
+`join-our-team.html`, `contact.html`, `diversity-and-inclusion.html`, and `2023-24-season.html`
+(8 `<form action>` occurrences total — `contact.html` has two forms). Any other static-friendly
+form backend (Netlify Forms, Basin, Getform, a Google Form, a serverless function you write
+yourself) works the same way — just change the `action` URL everywhere it appears.
 
 `contact.html` also embeds a free, key-less Google Maps `<iframe>` pointed at the club's address.
 The original Wix page likely had a similar map widget, but it's client-side rendered and
@@ -341,8 +341,8 @@ request — that page now only links out to BC Rugby's live fixtures/results.
 
 ## Manual steps for the club after migrating
 
-1. **Swap in a real form backend** — see "Forms" above. This is the most important step; forms
-   will silently do nothing useful until `YOUR_FORM_ID` is replaced.
+1. ~~Swap in a real form backend~~ — done. Forms are live on Formspree (`f/moeqnbpq`) — see
+   "Forms" above for how to change it later if needed.
 2. **Re-point DNS** once the new host is live: update the domain's nameservers or `A`/`CNAME`
    records to point at the new static host instead of Wix, then cancel the Wix subscription once
    the new site is confirmed live and DNS has propagated (can take up to 24–48 hours).
