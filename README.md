@@ -394,3 +394,184 @@ request — that page now only links out to BC Rugby's live fixtures/results.
    all 7 pages crawled and indexed much faster than waiting for search engines to find them on
    their own. See the "SEO" section above for what's already in place, and what to update if the
    domain ever changes.
+
+## Moving the domain: Wix → Cloudflare, hosting on GitHub Pages
+
+This is a from-scratch runbook for the club to follow by hand, in this exact order, to (1) host
+this site on GitHub Pages for free, (2) move the domain's *registration* (not just its DNS) from
+Wix to Cloudflare Registrar, at cost with no markup, and (3) keep `www.katsrugbyclub.com` and
+`katsrugbyclub.com` working the whole time. No step here has been performed for you — every
+step below happens in the club's own Wix, Cloudflare, and GitHub accounts, by hand.
+
+**Why this order matters:** Cloudflare's own transfer process *requires* a domain to already be
+using Cloudflare's nameservers (an "Active" DNS zone) before it will even accept an authorization
+code to start the registration transfer — see Phase 3 below. So the safe sequence is: get the new
+site fully working on the *old* DNS first (zero risk, easy to undo), then move DNS hosting to
+Cloudflare (a nameserver change, not a registrar change — the domain still legally belongs to Wix
+at this point), confirm nothing broke, and only *then* start the registrar transfer, which from
+that point on is a paperwork/billing change that doesn't touch the live DNS records again.
+
+### Phase 1 — Put the site on GitHub Pages, but don't touch the domain yet (~15–30 minutes)
+
+1. Push this repository to GitHub if it isn't already (it is, if you're reading this on GitHub).
+2. In the repo, go to **Settings → Pages**. Under "Build and deployment", set Source to "Deploy
+   from a branch" and pick the branch this site lives on (e.g. `main`) with folder `/ (root)`.
+3. Under "Custom domain", type `katsrugbyclub.com` and click **Save**. This automatically creates
+   a `CNAME` file (containing just `katsrugbyclub.com`) in the repo root — GitHub does this for
+   you, you don't need to create it by hand.
+4. At this point GitHub will show "DNS check unsuccessful" — that's expected, because the domain's
+   DNS still points at Wix. Leave it; you'll fix DNS in the next phase.
+   *(Source: [GitHub Docs — Managing a custom domain for your GitHub Pages
+   site](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).)*
+
+### Phase 2 — Point the domain at GitHub Pages while it's still fully hosted at Wix (~10 minutes to change, up to 24–48 hours to fully propagate)
+
+This proves the new site works on the real domain *before* anything about the domain's
+registration changes — if anything looks wrong, you can revert this in Wix in minutes with no
+transfer in progress to worry about.
+
+1. In Wix, go to **Domains**, click the **Domain Actions** icon next to `katsrugbyclub.com`, and
+   choose **Manage DNS records**.
+   *(Source: [Wix — Managing DNS Records in Your Wix
+   Account](https://support.wix.com/en/article/managing-dns-records-in-your-wix-account).)*
+2. Add four **A** records for the bare/apex domain (host field left blank or set to `@`,
+   whichever Wix's form asks for), one per GitHub Pages IP address:
+   `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`.
+3. Add one **CNAME** record: host `www`, value `runningrook.github.io` (or the correct
+   `<username-or-org>.github.io` for wherever this repo lives).
+4. Remove/replace whatever A/CNAME records currently point the domain at Wix's own hosting (Wix's
+   DNS manager lets you edit or delete existing A/CNAME entries the same way).
+5. Wait for DNS to propagate (Wix and GitHub docs both note this can take up to 24–48 hours,
+   though it's often much faster). Back in the repo's **Settings → Pages**, GitHub will show a
+   green "DNS check successful" once it sees the records, and will then auto-provision an HTTPS
+   certificate. Once that finishes, tick **Enforce HTTPS**. GitHub notes this checkbox "can take up
+   to 24 hours" to become available after DNS first verifies.
+   *(Source: [GitHub Docs, same
+   page](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site) as above.)*
+6. Confirm `https://katsrugbyclub.com` and `https://www.katsrugbyclub.com` both load the new site
+   correctly before moving on. At this point the domain is still 100% registered and DNS-hosted at
+   Wix — only where it *points* has changed.
+
+### Phase 3 — Move DNS hosting to Cloudflare (nameserver change only — the domain still belongs to Wix) (~a few minutes to set up, up to 24 hours for Cloudflare to show "Active")
+
+Cloudflare's own registrar-transfer flow will not let you enter an authorization code until the
+domain is already an **Active** DNS zone on Cloudflare, so this has to happen before Phase 4, not
+after. *(Source: [Cloudflare Docs — Transfer a domain to
+Cloudflare](https://developers.cloudflare.com/registrar/get-started/transfer-domain-to-cloudflare/):
+"You cannot proceed with the transfer until your domain shows Active status.")*
+
+1. Create a free Cloudflare account at [dash.cloudflare.com](https://dash.cloudflare.com) if the
+   club doesn't have one, and click **Add a domain**, entering `katsrugbyclub.com`.
+2. Cloudflare will scan and import the existing DNS records automatically. Check the imported list
+   against what you set up in Phase 2 (four A records for the apex + one CNAME for `www`) and add
+   anything missing. **Leave every record "DNS only" (grey cloud, not orange)** — do not enable
+   Cloudflare's proxy on these records. This isn't documented on Cloudflare's or GitHub's official
+   pages, but is strong, consistent community guidance: if Cloudflare proxies (orange-clouds) the
+   records, GitHub can't complete the verification check it uses to issue/renew the HTTPS
+   certificate, and the site's certificate can silently fail to renew later. *(Source: [GitHub
+   Community discussion #23632](https://github.com/orgs/community/discussions/23632) and multiple
+   independent write-ups reaching the same conclusion — treat this as well-corroborated practical
+   guidance rather than an official policy.)*
+3. Cloudflare gives you two nameservers (e.g. `xxx.ns.cloudflare.com`). Go back to Wix → Domains →
+   Domain Actions → and look for the option to change nameservers (Wix may call this "Connect
+   Domain" / "Use custom nameservers" or similar — the exact wording moves around in Wix's UI, so
+   look under Domain Actions if it isn't obvious). Enter Cloudflare's two nameservers there.
+4. Wait for the Cloudflare dashboard to show the domain as **Active** (Cloudflare says this
+   typically takes minutes, up to 24 hours). Until then, DNS resolution is still working normally
+   through Wix's nameservers, so the site stays up throughout this step.
+5. Re-confirm `katsrugbyclub.com` and `www.katsrugbyclub.com` still load correctly once Cloudflare
+   shows Active.
+
+### Phase 4 — Unlock the domain and get its authorization code from Wix (~10 minutes, code arrives by email — Wix doesn't state an exact delivery time)
+
+1. Confirm the domain qualifies for transfer. Per Wix's own transfer page, ICANN rules mean a
+   domain **cannot** be transferred if any of the following happened in the last 60 days: it was
+   first registered, its registrant contact info was changed, or it was already transferred.
+   *(Source: [Wix — Domain Transfer](https://www.wix.com/domains/domain-transfer): "You usually
+   can't transfer a domain within 60 days of registering it because of ICANN's '60-day domain
+   lock' policy.")* If katsrugbyclub.com doesn't meet this, wait until it does before continuing.
+2. In Wix, go to **Domains**, click **Domain Actions** next to `katsrugbyclub.com`, and choose
+   **Transfer away from Wix**. Wix will ask you to confirm ("Transfer Domain" → "I Still Want to
+   Transfer"). Wix does not have a separate manual "unlock" toggle for this — starting the
+   transfer-away flow is what unlocks the domain and triggers the authorization (EPP) code, sent to
+   the domain's registrant contact email.
+   *(Source: [Wix — Transferring Your Wix Domain Away from
+   Wix](https://support.wix.com/en/article/transferring-your-wix-domain-away-from-wix-2477749).)*
+3. Also check that **domain privacy/WHOIS privacy is off (or that you have access to the
+   registrant email)**, since the authorization code and the transfer-approval request both go to
+   that inbox.
+4. Save the authorization code somewhere safe once it arrives — you'll paste it into Cloudflare in
+   the next phase.
+
+### Phase 5 — Start the registrar transfer at Cloudflare (~30 minutes of active work; Cloudflare states the full transfer can take "up to 10 days", Wix states "up to 7–8 days" — expect up to about a week and a half)
+
+The site stays live and reachable throughout this entire phase — DNS is already being served by
+Cloudflare from Phase 3, and a registrar transfer only changes *who bills for and administers* the
+domain, not where it resolves.
+
+1. In the Cloudflare dashboard, go to the domain → **Transfer Domain In**, and paste the
+   authorization code from Phase 4.
+2. Cloudflare will ask for registrant contact details (required by ICANN) and a payment method on
+   file, since a transfer also counts as a one-year renewal — **you cannot get a "free" partial
+   transfer; the standard renewal-price year is added on top of whatever time was left**.
+   *(Source: [Wix — Domain
+   Transfer](https://www.wix.com/domains/domain-transfer): "You must pay for at least one
+   additional year of registration at the standard renewal price".)*
+3. Confirm the request. Wix (the losing registrar) will then email a separate transfer-approval
+   request — approve it there too; most registrars send this within 24 hours of the request, and
+   the transfer usually completes within an hour of approving, but can take longer.
+   *(Source: same [Cloudflare transfer
+   docs](https://developers.cloudflare.com/registrar/get-started/transfer-domain-to-cloudflare/)
+   as above: "Active work: about 30 minutes. Total time: up to 10 days, depending on your
+   registrar.")*
+4. **Price check** — Cloudflare Registrar sells at the registry's wholesale cost with no markup, so
+   the exact number moves with the underlying `.com` wholesale fee rather than being a fixed retail
+   price. As of this writing, independent domain-price trackers report Cloudflare's `.com` price at
+   roughly **$10.44–$10.46/year**, and note a wholesale increase (Verisign's registry fee) is
+   expected to push this to roughly **$11.15/year around November 2026**. Cloudflare's own
+   marketing page confirms the *policy* ("Cloudflare Registrar does not mark up domain prices at
+   all... customers only pay the price charged by registries and ICANN") but does not publish a
+   literal number on a page this research could fetch — **the club should check the live price
+   shown in the Cloudflare dashboard at the moment of transfer**, rather than relying on the figure
+   above. *(Sources: [Cloudflare — Registrar
+   product page](https://www.cloudflare.com/products/registrar/) for the no-markup policy;
+   third-party trackers [tld-list.com/registrars/cloudflare](https://tld-list.com/registrars/cloudflare)
+   and [startupowl.com/reviews/cloudflare-registrar](https://startupowl.com/reviews/cloudflare-registrar)
+   for the current/upcoming numbers — not verified against Cloudflare's own dashboard, since this
+   task didn't log into any account.)*
+
+### Phase 6 — After the transfer completes (~15 minutes)
+
+1. Confirm in the Cloudflare dashboard that `katsrugbyclub.com` now shows Cloudflare as the
+   registrar (not just the DNS host).
+2. Re-check `https://katsrugbyclub.com` and `https://www.katsrugbyclub.com` one more time, and
+   confirm **Enforce HTTPS** is still ticked in the repo's **Settings → Pages**.
+3. In Wix, the domain itself has now left Wix, so there's nothing left to "cancel" on the domain
+   side — but the **website/Premium plan is billed completely separately from the domain** and
+   will keep renewing on its own unless cancelled. Go to Wix **Premium Subscriptions** and cancel
+   or let the site plan lapse once you're sure the GitHub Pages site is fully working.
+   *(Source: [Wix — Canceling a Wix
+   Domain](https://support.wix.com/en/article/canceling-a-wix-domain): "Your site plan and domain
+   are separate services. If you want to cancel your Premium or Studio plan, you'll need to do
+   that separately.")*
+4. **Before cancelling the Wix plan**, double check whether Wix was also hosting any
+   `@katsrugbyclub.com` email mailboxes (e.g. `info@`, `manager@`) — cancelling the plan can cut
+   those off. Set up replacement email hosting first (Google Workspace, Zoho Mail, etc.) if so.
+
+### What's genuinely uncertain in this guide
+
+- **Wix's exact wording/menu path for "unlock" and for changing nameservers** moves around in
+  Wix's own UI over time and between account types, and Wix's help articles don't show a
+  standalone "unlock" switch separate from the transfer-away flow itself — treat "Domain Actions"
+  as the place to look, not the literal button text above.
+- **How long Wix actually takes to email the authorization code** after you request it isn't
+  stated on Wix's own pages this research could reach (one third-party support site claims "within
+  24 hours," but that wasn't confirmed on support.wix.com directly).
+- **The exact current Cloudflare `.com` price** — Cloudflare doesn't publish a plain numeric price
+  list on a page this research could fetch (the pricing pages returned 403/no figures); the
+  ~$10.44–$10.46/year figure comes from third-party domain-price trackers, not Cloudflare directly.
+  Confirm the live number in the Cloudflare dashboard before starting Phase 5.
+- **Keeping Cloudflare DNS records "DNS only" instead of proxied** is well-corroborated advice from
+  community sources, not from an official Cloudflare or GitHub statement — included here because
+  the failure mode it avoids (silent HTTPS certificate renewal failure) is exactly the kind of
+  downtime this whole runbook is trying to prevent.
