@@ -76,6 +76,21 @@
     el.hidden = false;
   }
 
+  // ---------- confirm modal ----------
+  // A custom dialog instead of window.confirm() — some in-app browsers
+  // (chat-app link previews, embedded webviews) block native confirm()
+  // silently, which would make a destructive action just do nothing.
+  var pendingConfirm = null;
+  function showConfirm(message, onConfirm) {
+    $("#confirmMessage").textContent = message;
+    pendingConfirm = onConfirm;
+    $("#confirmModal").hidden = false;
+  }
+  function closeConfirm() {
+    $("#confirmModal").hidden = true;
+    pendingConfirm = null;
+  }
+
   // ---------- API helper ----------
   function api(path, options) {
     options = options || {};
@@ -459,15 +474,16 @@
     $("#rosterChips").addEventListener("click", function (e) {
       var btn = e.target.closest("[data-action='remove-player']");
       if (!btn || !state.isAdmin) return;
-      if (!confirm("Remove this player from the squad list?")) return;
       var id = btn.getAttribute("data-id");
-      api("/api/roster/" + id, { method: "DELETE", admin: true })
-        .then(function () {
-          state.roster = state.roster.filter(function (p) { return p.id !== id; });
-          renderRoster();
-          renderGames();
-        })
-        .catch(function (e2) { console.error(e2); showToast("Couldn't remove player."); });
+      showConfirm("Remove this player from the squad list?", function () {
+        api("/api/roster/" + id, { method: "DELETE", admin: true })
+          .then(function () {
+            state.roster = state.roster.filter(function (p) { return p.id !== id; });
+            renderRoster();
+            renderGames();
+          })
+          .catch(function (e2) { console.error(e2); showToast("Couldn't remove player."); });
+      });
     });
 
     function handleGamesClick(e) {
@@ -594,15 +610,24 @@
 
     $("#deleteGameBtn").addEventListener("click", function () {
       if (!state.editingGameId) return;
-      if (!confirm("Delete this fixture? This can't be undone.")) return;
-      api("/api/games/" + state.editingGameId, { method: "DELETE", admin: true })
-        .then(function () {
-          closeGameForm();
-          showToast("Fixture deleted.");
-          loadState({ background: true });
-        })
-        .catch(function (e) { $("#gameFormError").textContent = e.message || "Couldn't delete — try again."; });
+      var gameId = state.editingGameId;
+      showConfirm("Delete this fixture? This can't be undone.", function () {
+        api("/api/games/" + gameId, { method: "DELETE", admin: true })
+          .then(function () {
+            closeGameForm();
+            showToast("Fixture deleted.");
+            loadState({ background: true });
+          })
+          .catch(function (e) { $("#gameFormError").textContent = e.message || "Couldn't delete — try again."; });
+      });
     });
+
+    $("#confirmYesBtn").addEventListener("click", function () {
+      var cb = pendingConfirm;
+      closeConfirm();
+      if (cb) cb();
+    });
+    $("#confirmCancelBtn").addEventListener("click", closeConfirm);
 
     $all(".modal-overlay").forEach(function (overlay) {
       overlay.addEventListener("click", function (e) {
@@ -610,6 +635,7 @@
         if (overlay.id === "whoModal" && !$("#whoCloseBtn").hidden) closeWhoModal();
         if (overlay.id === "adminModal") closeAdminModal();
         if (overlay.id === "gameFormModal") closeGameForm();
+        if (overlay.id === "confirmModal") closeConfirm();
       });
     });
   }
