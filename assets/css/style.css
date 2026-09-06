@@ -628,6 +628,18 @@ textarea {
 .text-center { text-align: center; }
 .mt-0 { margin-top: 0; }
 
+/* Inline links within body copy (nav/buttons/footer/cards override `a` globally,
+   so this only affects prose links like the ones on diversity-and-inclusion.html) */
+main p a {
+  color: var(--kats-green);
+  text-decoration: underline;
+  text-decoration-color: rgba(5, 104, 57, 0.35);
+  text-underline-offset: 2px;
+}
+main p a:hover {
+  text-decoration-color: currentColor;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 860px) {
