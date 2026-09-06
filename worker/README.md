@@ -32,6 +32,28 @@ This prints a `database_id`. Copy it into `worker/wrangler.toml`, replacing
 wrangler d1 execute kats-checkin --remote --file=./schema.sql
 ```
 
+## 3b. Load the 2026/27 season fixtures (optional but recommended)
+
+```bash
+wrangler d1 execute kats-checkin --remote --file=./seed-fixtures.sql
+```
+
+This loads all 18 Division 2 fixtures from the club-provided schedule. A
+few notes on that data (also in the comment header of `seed-fixtures.sql`):
+
+- Kickoff is set to the club's stated typical **12:45** for every game —
+  spot-check any that differ once the actual schedule/times are posted.
+- Home games are set to **Balaclava Park, Vancouver, BC**.
+- Away games use the opponent's club name as a Google Maps *search* term
+  (e.g. "Chilliwack RFC"), not a confirmed street address — good enough to
+  get players pointed the right way, not precise. The **Bruins away**
+  fixture (07-Nov) has no venue at all — I wasn't confident guessing which
+  club that name refers to, so it's blank rather than wrong. Fill in real
+  venues via the admin ⚙ → edit fixture as they're confirmed, or re-run
+  this file after editing it.
+- Re-running this file is safe — it's `INSERT OR REPLACE`, so editing a row
+  above and re-running just updates that game instead of duplicating it.
+
 ## 4. Set the private-link access key
 
 This is what keeps the page private — nobody sees so much as the roster or
