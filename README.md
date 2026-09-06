@@ -136,6 +136,44 @@ season even though the organisation page itself is correct and permanent.
   with a hand-maintained fixtures list again (the original `.fixtures-list`/`.fixture` markup and
   CSS are still in `style.css` and used for the archive section, so nothing needs to be rebuilt).
 
+## Diversity &amp; Inclusion (Safe Sport / Code of Conduct links)
+
+`diversity-and-inclusion.html`'s "Safe Sport &amp; Code of Conduct" section links out to BC
+Rugby's own policy pages rather than restating them:
+
+**Safe Sport:**
+
+```
+https://www.bcrugby.com/safe-sport
+```
+
+**BCRU Code of Conduct (PDF):**
+
+```
+https://irp.cdn-website.com/601daad2/files/uploaded/BC+Rugby+Code+of+Conduct-9242d4a2.pdf
+```
+
+Both were found by browsing BC Rugby's real site, not guessed:
+
+- `www.bcrugby.com/safe-sport` is BC Rugby's own live Safe Sport page (confirmed via its
+  `og:title`: "Safe Sport &amp; Player Safety | BC Rugby | BC"). Note that `bcrugby.com` (no
+  `www`) uses a different URL structure/CMS (e.g. `bcrugby.com/governance/`) where the
+  equivalent `/governance/safe-sport/` path 404s &mdash; `www.bcrugby.com/safe-sport` is the
+  correct live one.
+- The Code of Conduct PDF link was scraped directly out of that Safe Sport page's HTML (it's
+  hosted on `irp.cdn-website.com`, the CDN behind BC Rugby's site builder, not on the
+  `bcrugby.com` domain itself — that's expected and not a sign of a wrong link, since the
+  live page itself links there). Guessed `bcrugby.com/wp-content/uploads/.../*.pdf` URLs found
+  via search (there's an older WordPress instance at that domain, apparently a leftover/staging
+  copy) all returned `403 Forbidden`, so they were **not** used. The PDF above was downloaded
+  and its text extracted to confirm it's genuinely titled "BC Rugby code of conduct", board
+  approved January 27, 2026, with BC Rugby's real Vancouver address and contact info on the
+  cover page.
+
+If BC Rugby reorganizes their site, re-derive these by opening `https://www.bcrugby.com/safe-sport`
+directly and reading whatever Code of Conduct link it currently points to, rather than guessing
+a URL pattern.
+
 ## Forms
 
 Two kinds of form appear on the site, matching the original:
