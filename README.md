@@ -15,7 +15,7 @@ dollars a year on any static host.
 ├── history.html             History
 ├── join-our-team.html       Join Our Team
 ├── contact.html              Contact (full form + map)
-├── 2023-24-season.html      Fixtures & Results (live PlayHQ link-out + 2024/25 archive; filename kept from the live site's URL)
+├── 2023-24-season.html      Fixtures & Results (live BC Rugby link-out + 2024/25 archive; filename kept from the live site's URL)
 ├── assets/
 │   ├── css/style.css        Single shared stylesheet (brand colours, layout, responsive rules)
 │   ├── js/main.js           Mobile nav toggle + progressive-enhancement form submission
@@ -61,8 +61,25 @@ https://www.playhq.com/ca/rugby-canada/org/kats-rfc/0ab94db6
 https://www.playhq.com/ca/rugby-canada/org/kats-rfc/0ab94db6/register
 ```
 
-Both URLs are used as external "View/Register on PlayHQ" buttons on `index.html`,
-`2023-24-season.html` and `join-our-team.html`.
+The registration URL is used as the "Register on PlayHQ" button on `join-our-team.html`.
+
+**Fixtures & results link to BC Rugby, not directly to PlayHQ.** At the club's request, the
+"View on BC Rugby" / "Fixtures, Ladder & Results" buttons on `index.html` and
+`2023-24-season.html` point to BC Rugby Union's own fixtures/results page instead of the PlayHQ
+org page above:
+
+```
+https://www.bcrugby.com/fixtures---results0adb61e3
+```
+
+BC Rugby's page is itself powered by PlayHQ's data underneath, but the club wanted the visible
+link to be BC Rugby's own branded page rather than PlayHQ directly. **A live, client-side
+fixtures/ladder widget pulling this data automatically was investigated but is on hold**: BC
+Rugby's page calls a CORS-open PlayHQ API (so it *can* legitimately be called from another site's
+JavaScript, unlike the blocked iframe approach), but doing so needs a PlayHQ API key and the
+Kats' specific Division 2 team ID, neither of which exist yet. Once the club has requested and
+received those from PlayHQ/BC Rugby, a live widget can replace this link-out card — until then,
+linking straight to BC Rugby's page is the correct, zero-maintenance option.
 
 ### How this was verified (so it doesn't get pasted-in blind next season)
 
