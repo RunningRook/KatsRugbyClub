@@ -1,0 +1,572 @@
+/* =========================================================
+   Team Check-In — extends assets/css/style.css with the
+   fixture/roster/RSVP components. Reuses the club's existing
+   tokens (--kats-green, --kats-gold, --ink, --paper, --border,
+   --radius, --font-head/--font-body) rather than inventing a
+   parallel palette; adds only what the site doesn't have yet:
+   an "out" red and a neutral "pending" grey for RSVP states.
+   ========================================================= */
+
+:root {
+  --rsvp-in: var(--kats-green);
+  --rsvp-in-soft: #e3f0e8;
+  --rsvp-maybe: var(--kats-gold-dark);
+  --rsvp-maybe-soft: #fbeeda;
+  --rsvp-out: #b23a2e;
+  --rsvp-out-soft: #f7e6e4;
+  --rsvp-pending: #8a8f86;
+  --rsvp-pending-soft: #eeece6;
+}
+
+.checkin-wrap {
+  max-width: 640px;
+  padding-top: 40px;
+  padding-bottom: 64px;
+}
+
+/* ---------- status banner / identity strip ---------- */
+
+.checkin-banner {
+  background: var(--rsvp-maybe-soft);
+  color: var(--kats-gold-dark);
+  border: 1px solid var(--kats-gold);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  margin-bottom: 18px;
+}
+
+.identity-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: var(--paper-off);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+  margin-bottom: 24px;
+}
+
+.identity-strip strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--kats-green);
+  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---------- section chrome ---------- */
+
+.checkin-section {
+  margin-bottom: 34px;
+}
+
+.checkin-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.checkin-section-head h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.count-pill,
+.tally-pill {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.count-pill {
+  background: var(--rsvp-pending-soft);
+  color: var(--ink-soft);
+}
+
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+}
+
+.icon-btn:hover {
+  border-color: var(--kats-green);
+  color: var(--kats-green);
+}
+
+.icon-btn.small {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.icon-btn.is-active {
+  background: var(--kats-green);
+  border-color: var(--kats-green);
+  color: var(--paper);
+}
+
+.empty-state {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+/* ---------- fixture cards ---------- */
+
+.games-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.game-card {
+  display: flex;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.game-card.is-past {
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+.game-stub {
+  flex: none;
+  width: 64px;
+  background: var(--kats-green);
+  background-image: linear-gradient(160deg, var(--kats-green), var(--kats-green-dark));
+  color: var(--paper);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 4px;
+  text-align: center;
+}
+
+.stub-day {
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--kats-gold);
+}
+
+.stub-num {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 1.6rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stub-month {
+  font-size: 0.68rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.game-body {
+  flex: 1;
+  min-width: 0;
+  padding: 13px 16px 15px;
+}
+
+.game-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.game-head h3 {
+  font-size: 1.05rem;
+  margin: 0;
+  color: var(--ink);
+}
+
+.card-admin-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.game-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.meta-link:hover {
+  color: var(--kats-green);
+}
+
+.game-notes {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.rsvp-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.rsvp-btn {
+  flex: 1;
+  padding: 10px 6px;
+  border-radius: 999px;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  background: transparent;
+  letter-spacing: 0.02em;
+}
+
+.rsvp-in { border: 1.5px solid var(--rsvp-in); color: var(--rsvp-in); }
+.rsvp-in.active { background: var(--rsvp-in); color: #fff; }
+.rsvp-maybe { border: 1.5px solid var(--rsvp-maybe); color: var(--rsvp-maybe); }
+.rsvp-maybe.active { background: var(--rsvp-maybe); color: #fff; }
+.rsvp-out { border: 1.5px solid var(--rsvp-out); color: var(--rsvp-out); }
+.rsvp-out.active { background: var(--rsvp-out); color: #fff; }
+
+.tally-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.tally-pill.in { background: var(--rsvp-in-soft); color: var(--rsvp-in); }
+.tally-pill.maybe { background: var(--rsvp-maybe-soft); color: var(--rsvp-maybe); }
+.tally-pill.out { background: var(--rsvp-out-soft); color: var(--rsvp-out); }
+.tally-pill.pending { background: var(--rsvp-pending-soft); color: var(--rsvp-pending); }
+
+.tally-caret {
+  margin-left: auto;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.tally-row.is-open .tally-caret {
+  transform: rotate(180deg);
+}
+
+.tally-detail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tally-group {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.tally-group-label {
+  text-transform: capitalize;
+  margin-right: 6px;
+  font-weight: 600;
+}
+
+.tally-group-label.in { color: var(--rsvp-in); }
+.tally-group-label.maybe { color: var(--rsvp-maybe); }
+.tally-group-label.out { color: var(--rsvp-out); }
+
+/* ---------- roster ---------- */
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 8px 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.chip button {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--rsvp-out-soft);
+  color: var(--rsvp-out);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inline-add {
+  display: flex;
+  gap: 8px;
+}
+
+.inline-add input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+}
+
+.inline-add input:focus {
+  border-color: var(--kats-green);
+  outline: none;
+}
+
+.inline-add button {
+  border: none;
+  background: var(--kats-green);
+  color: var(--paper);
+  border-radius: var(--radius);
+  padding: 0 18px;
+  font-family: var(--font-head);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.inline-add button:hover {
+  background: var(--kats-green-dark);
+}
+
+/* ---------- toast ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--ink);
+  color: var(--paper);
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 60;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ---------- modals ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 16, 12, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 50;
+}
+
+@media (min-width: 560px) {
+  .modal-overlay {
+    align-items: center;
+    padding: 20px;
+  }
+}
+
+.modal {
+  background: var(--paper);
+  width: 100%;
+  max-width: 440px;
+  max-height: 88vh;
+  overflow-y: auto;
+  border-radius: 18px 18px 0 0;
+  padding: 22px 20px 26px;
+  box-shadow: var(--shadow);
+}
+
+@media (min-width: 560px) {
+  .modal {
+    border-radius: var(--radius);
+  }
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.modal-head h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.modal p.hint {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin: 4px 0 14px;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field label {
+  display: block;
+  font-family: var(--font-head);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+}
+
+.field input:focus,
+.field textarea:focus {
+  border-color: var(--kats-green);
+  outline: none;
+}
+
+.field-row {
+  display: flex;
+  gap: 10px;
+}
+
+.field-row .field {
+  flex: 1;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.modal-actions button {
+  flex: 1;
+}
+
+.error-text {
+  color: var(--rsvp-out);
+  font-size: 0.78rem;
+  margin: -6px 0 12px;
+  min-height: 15px;
+}
+
+.who-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+
+.who-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: var(--paper-off);
+}
+
+.who-row:hover {
+  border-color: var(--kats-green);
+}
+
+.who-empty {
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  padding: 14px 0;
+}
+
+[hidden] {
+  display: none !important;
+}

@@ -23,6 +23,8 @@ dollars a year on any static host.
 │   ├── css/style.css        Single shared stylesheet (brand colours, layout, responsive rules)
 │   ├── js/main.js           Mobile nav toggle + progressive-enhancement form submission
 │   └── img/                 All images used on the site (crests, photos, opponent logos, favicon)
+├── check-in/                Team Check-In tool (fixtures + roster + In/Out/Maybe) — see below
+├── worker/                  Its small Cloudflare Worker + D1 backend — see worker/README.md
 └── README.md
 ```
 
@@ -33,6 +35,27 @@ Each page repeats its own `<header>`/`<footer>` markup (no templating engine, by
 the "just files" property that makes static hosting simple). If you add a page, copy the
 nav/footer block from an existing one and update the `aria-current="page"` attribute on the
 matching nav link.
+
+## Team Check-In
+
+`/check-in/` is the one deliberate exception to "no backend" above: players
+tap **In / Maybe / Out** on each upcoming fixture and it updates live for
+everyone, which needs somewhere to actually store that shared state. It's
+a plain static page (`check-in/index.html` + `check-in/app.js`) talking to
+a small Cloudflare Worker + D1 database (`worker/`) — no accounts, no
+Claude/Google/other sign-in, just a normal webpage and a normal API.
+
+**Before this works, someone needs to deploy the Worker once** — it's not
+live yet. Full steps are in [`worker/README.md`](worker/README.md)
+(~5 minutes: create a D1 database, run the schema, `wrangler deploy`, then
+paste the resulting URL into `check-in/app.js`'s `API_BASE` constant).
+Until that's done, the check-in page will show a "couldn't reach the
+check-in service" banner.
+
+Once deployed, the first person to open the ⚙ icon on `/check-in/` sets an
+admin PIN for the team — that PIN (not a Claude/GitHub/Google account)
+gates adding/editing fixtures and removing roster players. It's enforced
+server-side by the Worker, not just hidden in the page.
 
 ## Brand
 

@@ -1,0 +1,10 @@
+name = "kats-checkin-api"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# Created by `wrangler d1 create kats-checkin` — paste the database_id it
+# prints into the line below before your first deploy. See ../worker/README.md.
+[[d1_databases]]
+binding = "DB"
+database_name = "kats-checkin"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"

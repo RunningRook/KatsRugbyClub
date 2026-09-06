@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Team Check-In | Kats Rugby Club</title>
+  <meta name="description" content="See Kats RFC's upcoming fixtures and let the team know if you're in, out, or a maybe." />
+  <meta property="og:title" content="Team Check-In | Kats Rugby Club" />
+  <meta property="og:description" content="See Kats RFC's upcoming fixtures and let the team know if you're in, out, or a maybe." />
+  <meta property="og:site_name" content="Kats Rugby Club" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.katsrugbyclub.com/check-in/" />
+  <meta property="og:image" content="https://www.katsrugbyclub.com/assets/img/kats-logo-on-photo.png" />
+  <meta name="robots" content="noindex" />
+  <link rel="canonical" href="https://www.katsrugbyclub.com/check-in/" />
+  <meta name="theme-color" content="#056839" />
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.ico" />
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="site-header">
+    <nav class="nav-bar">
+      <a class="brand" href="../index.html">
+        <img src="../assets/img/kats-logo.png" alt="Kats Rugby Football Club crest" />
+      </a>
+      <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+      <ul class="nav-links">
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../about-us.html">About Us</a></li>
+        <li><a href="../history.html">History</a></li>
+        <li><a href="../join-our-team.html">Join Our Team</a></li>
+        <li><a href="../diversity-and-inclusion.html">Diversity &amp; Inclusion</a></li>
+        <li><a href="../2023-24-season.html">Fixtures &amp; Results</a></li>
+        <li><a href="./" aria-current="page">Team Check-In</a></li>
+        <li><a class="nav-cta" href="../contact.html">Contact Us!</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <div class="wrap">
+        <p class="eyebrow" style="color:rgba(255,255,255,0.85);">Squad Availability</p>
+        <h1 id="teamNameEl">Kats Rugby Club</h1>
+        <p>Check upcoming fixtures and let the team know if you're in, out, or a maybe — everyone sees it update live.</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap checkin-wrap">
+        <div id="banner" class="checkin-banner" hidden></div>
+
+        <div class="identity-strip">
+          <span id="identityText">Checking who you are…</span>
+          <button id="switchBtn" class="link-btn" hidden>Switch</button>
+          <button id="adminBtn" class="icon-btn" style="margin-left:auto;" aria-label="Admin settings" title="Admin">⚙</button>
+        </div>
+
+        <section class="checkin-section">
+          <div class="checkin-section-head">
+            <h2>Upcoming Fixtures</h2>
+            <button id="addGameBtn" class="btn btn-outline-green admin-only" hidden style="padding:6px 16px; font-size:0.82rem;">+ Add fixture</button>
+          </div>
+          <div id="gamesList" class="games-list"></div>
+          <div id="gamesEmpty" class="empty-state" hidden>No fixtures on the board yet. Once an admin adds one, it'll show up here.</div>
+          <button id="pastToggle" class="link-btn" style="margin-top:14px;" hidden>Show past fixtures</button>
+          <div id="pastList" class="games-list" hidden style="margin-top:14px;"></div>
+        </section>
+
+        <section class="checkin-section">
+          <div class="checkin-section-head">
+            <h2>Squad</h2>
+            <span class="count-pill" id="rosterCount">0</span>
+          </div>
+          <div id="rosterChips" class="chip-list"></div>
+          <div id="rosterEmpty" class="empty-state" hidden style="margin-bottom:12px;">Nobody on the squad list yet — add your name below.</div>
+          <form id="addPlayerForm" class="inline-add">
+            <input id="addPlayerInput" placeholder="Not listed? Add your name" maxlength="40" autocomplete="off" />
+            <button type="submit">Add</button>
+          </form>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <!-- WHO ARE YOU MODAL -->
+  <div id="whoModal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Who's checking in?</h2>
+        <button id="whoCloseBtn" class="icon-btn small" aria-label="Close" hidden>✕</button>
+      </div>
+      <p class="hint">Pick your name so the team can see your availability, or add yourself if you're not listed yet.</p>
+      <div class="field">
+        <input id="whoSearch" placeholder="Search the squad…" autocomplete="off" />
+      </div>
+      <div id="whoList" class="who-list"></div>
+      <form id="whoAddForm" class="inline-add" style="margin-top:12px;">
+        <input id="whoAddInput" placeholder="Your name isn't listed — type it here" maxlength="40" autocomplete="off" />
+        <button type="submit">Add me</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ADMIN MODAL -->
+  <div id="adminModal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="adminModalTitle">Admin access</h2>
+        <button id="adminCloseBtn" class="icon-btn small" aria-label="Close">✕</button>
+      </div>
+
+      <div id="adminSetupView" hidden>
+        <p class="hint">First time here — set a short PIN that team management will use to add fixtures and manage the squad. Anyone with this PIN can make admin changes, so share it only with the coach/organizers.</p>
+        <div class="field">
+          <label for="setupTeamName">Team name</label>
+          <input id="setupTeamName" maxlength="40" />
+        </div>
+        <div class="field">
+          <label for="setupPin">New admin PIN (4+ digits/characters)</label>
+          <input id="setupPin" inputmode="numeric" maxlength="12" />
+        </div>
+        <div class="field">
+          <label for="setupPinConfirm">Confirm PIN</label>
+          <input id="setupPinConfirm" inputmode="numeric" maxlength="12" />
+        </div>
+        <p class="error-text" id="setupError"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-gold" id="setupSaveBtn">Save &amp; unlock</button>
+        </div>
+      </div>
+
+      <div id="adminLoginView" hidden>
+        <p class="hint">Enter the admin PIN to add fixtures or manage the squad.</p>
+        <div class="field">
+          <label for="loginPin">Admin PIN</label>
+          <input id="loginPin" inputmode="numeric" maxlength="12" />
+        </div>
+        <p class="error-text" id="loginError"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-gold" id="loginSubmitBtn">Unlock</button>
+        </div>
+      </div>
+
+      <div id="adminPanelView" hidden>
+        <div class="field">
+          <label for="panelTeamName">Team name</label>
+          <input id="panelTeamName" maxlength="40" />
+        </div>
+        <div class="modal-actions" style="margin-bottom:18px;">
+          <button type="button" class="btn btn-outline-green" id="panelSaveNameBtn" style="flex:1;">Save team name</button>
+        </div>
+
+        <div class="field">
+          <label for="panelNewPin">Change admin PIN</label>
+          <input id="panelNewPin" inputmode="numeric" maxlength="12" placeholder="New PIN" />
+        </div>
+        <div class="modal-actions" style="margin-bottom:18px;">
+          <button type="button" class="btn btn-outline-green" id="panelSavePinBtn" style="flex:1;">Update PIN</button>
+        </div>
+        <p class="error-text" id="panelError"></p>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" style="flex:1; border:1.5px solid var(--rsvp-out); color:var(--rsvp-out);" id="logoutAdminBtn">Log out of admin mode</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME FORM MODAL -->
+  <div id="gameFormModal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="gameFormTitle">Add fixture</h2>
+        <button id="gameFormCloseBtn" class="icon-btn small" aria-label="Close">✕</button>
+      </div>
+      <form id="gameForm">
+        <div class="field">
+          <label for="gfOpponent">Opponent</label>
+          <input id="gfOpponent" placeholder="e.g. Meraloma RFC" maxlength="60" required />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="gfDate">Date</label>
+            <input id="gfDate" type="date" required />
+          </div>
+          <div class="field">
+            <label for="gfTime">Kickoff time</label>
+            <input id="gfTime" type="time" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="gfLocation">Location</label>
+          <input id="gfLocation" placeholder="e.g. Kitsilano Beach Park, Field 2" maxlength="80" />
+        </div>
+        <div class="field">
+          <label for="gfNotes">Notes (optional)</label>
+          <textarea id="gfNotes" rows="2" maxlength="200" placeholder="e.g. Warm-up 45 min early, bring both jerseys"></textarea>
+        </div>
+        <p class="error-text" id="gameFormError"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn admin-only" id="deleteGameBtn" hidden style="flex:none; border:1.5px solid var(--rsvp-out); color:var(--rsvp-out);">Delete</button>
+          <button type="submit" class="btn btn-gold" id="gameFormSubmitBtn" style="flex:1;">Save fixture</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div>
+          <div class="brand" style="color:#fff; margin-bottom:10px;">
+            <img src="../assets/img/kats-logo.png" alt="Kats Rugby Football Club crest" />
+            Kats Rugby Football Club
+          </div>
+          <p style="color:rgba(255,255,255,0.7); max-width:320px;">Est. 1953 &middot; Vancouver, BC. Cheapest dues, best culture.</p>
+          <div class="social-row">
+            <a href="https://www.facebook.com/groups/TheKatsRugbyClub/" target="_blank" rel="noopener" aria-label="Kats RFC on Facebook">
+              <svg viewBox="0 0 24 24"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5 3.66 9.15 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.44 2.91h-2.34V22c4.78-.79 8.44-4.94 8.44-9.94Z"/></svg>
+            </a>
+            <a href="https://www.instagram.com/katsrfc/" target="_blank" rel="noopener" aria-label="Kats RFC on Instagram">
+              <svg viewBox="0 0 24 24"><path d="M12 2.2c2.7 0 3 .01 4.1.06 1 .05 1.6.2 2 .35.5.2.9.4 1.3.8.4.4.6.8.8 1.3.15.4.3 1 .35 2 .05 1.1.06 1.4.06 4.1s-.01 3-.06 4.1c-.05 1-.2 1.6-.35 2-.2.5-.4.9-.8 1.3-.4.4-.8.6-1.3.8-.4.15-1 .3-2 .35-1.1.05-1.4.06-4.1.06s-3-.01-4.1-.06c-1-.05-1.6-.2-2-.35-.5-.2-.9-.4-1.3-.8-.4-.4-.6-.8-.8-1.3-.15-.4-.3-1-.35-2-.05-1.1-.06-1.4-.06-4.1s.01-3 .06-4.1c.05-1 .2-1.6.35-2 .2-.5.4-.9.8-1.3.4-.4.8-.6 1.3-.8.4-.15 1-.3 2-.35C9 2.21 9.3 2.2 12 2.2Zm0 1.8c-2.67 0-2.99.01-4.04.06-.87.04-1.34.18-1.65.3-.42.16-.72.36-1.03.67-.31.31-.51.61-.67 1.03-.12.31-.26.78-.3 1.65C4.26 8.76 4.25 9.08 4.25 12s.01 3.24.06 4.29c.04.87.18 1.34.3 1.65.16.42.36.72.67 1.03.31.31.61.51 1.03.67.31.12.78.26 1.65.3 1.05.05 1.37.06 4.04.06s2.99-.01 4.04-.06c.87-.04 1.34-.18 1.65-.3.42-.16.72-.36 1.03-.67.31-.31.51-.61.67-1.03.12-.31.26-.78.3-1.65.05-1.05.06-1.37.06-4.29s-.01-3.24-.06-4.29c-.04-.87-.18-1.34-.3-1.65-.16-.42-.36-.72-.67-1.03a2.7 2.7 0 0 0-1.03-.67c-.31-.12-.78-.26-1.65-.3C14.99 4.01 14.67 4 12 4Zm0 3.4a4.6 4.6 0 1 1 0 9.2 4.6 4.6 0 0 1 0-9.2Zm0 1.8a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6Zm4.8-2a1.08 1.08 0 1 1 0 2.16 1.08 1.08 0 0 1 0-2.16Z"/></svg>
+            </a>
+            <a href="https://twitter.com/katsrugby" target="_blank" rel="noopener" aria-label="Kats RFC on Twitter">
+              <svg viewBox="0 0 24 24"><path d="M22 5.9c-.7.3-1.5.5-2.3.6.8-.5 1.5-1.3 1.8-2.3-.8.5-1.6.8-2.6 1a4 4 0 0 0-6.9 3.7A11.5 11.5 0 0 1 3.6 4.6a4.1 4.1 0 0 0 1.2 5.4c-.6 0-1.2-.2-1.7-.5v.1c0 2 1.4 3.6 3.2 4a4 4 0 0 1-1.8.1 4 4 0 0 0 3.8 2.8A8.1 8.1 0 0 1 2 18.6a11.4 11.4 0 0 0 6.3 1.9c7.5 0 11.7-6.4 11.7-11.9v-.5c.8-.6 1.5-1.3 2-2.2Z"/></svg>
+            </a>
+          </div>
+        </div>
+        <div>
+          <h4>Quick Links</h4>
+          <ul>
+            <li><a href="../index.html">Home</a></li>
+            <li><a href="../about-us.html">About Us</a></li>
+            <li><a href="../history.html">History</a></li>
+            <li><a href="../join-our-team.html">Join Our Team</a></li>
+            <li><a href="../diversity-and-inclusion.html">Diversity &amp; Inclusion</a></li>
+            <li><a href="../2023-24-season.html">Fixtures &amp; Results</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Contact</h4>
+          <ul>
+            <li>2804 W 3rd Ave, Vancouver, BC V6K 1M7, Canada</li>
+            <li><a href="mailto:info@katsrugbyclub.com">info@katsrugbyclub.com</a></li>
+            <li><a href="tel:6046691113">604-669-1113</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; <span id="year">2026</span> by Kats RFC</span>
+        <span>Rebuilt as a static site</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../assets/js/main.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <script src="app.js"></script>
+</body>
+</html>
