@@ -173,6 +173,77 @@ If BC Rugby reorganizes their site, re-derive these by opening `https://www.bcru
 directly and reading whatever Code of Conduct link it currently points to, rather than guessing
 a URL pattern.
 
+## Diversity &amp; Inclusion sourcing
+
+`diversity-and-inclusion.html`'s copy quotes or paraphrases several real policy documents rather
+than making claims up. Every quote/claim on that page, its exact source, and how it was verified:
+
+1. **"BC Rugby ... supports equal opportunity, prohibits discriminatory practices, and is
+   committed to providing an environment in which all Individuals can safely participate in sport
+   and are treated with respect and fairness."** (intro section, "Rugby is for everyone")
+   Source: **BC Rugby Code of Conduct**, §1.2 —
+   `https://irp.cdn-website.com/601daad2/files/uploaded/BC+Rugby+Code+of+Conduct-9242d4a2.pdf`
+   (board approved January 27, 2026). Verified by downloading the PDF and extracting its text
+   with `pdftotext`; the sentence is exact. **This replaces an earlier draft** that attributed a
+   different sentence ("welcomes full participation of all individuals ... irrespective of race,
+   ancestry, place of origin...") to BC Rugby generally. That exact wording could not be found
+   anywhere on `bcrugby.com` after extensive searching, and instead turned out to match the
+   Oakville, Ontario **Crusaders Rugby Club**'s own Inclusion and Harassment Policy — an unrelated
+   club with no connection to BC Rugby or the Kats. It was removed rather than kept misattributed.
+
+2. **"provide a safe, fun, positive, and inclusive environment"** (Safe Sport &amp; Code of
+   Conduct section) — Source: **BC Rugby Code of Conduct**, §1.1, same PDF as above. Verified
+   verbatim by the same `pdftotext` extraction ("...aims to provide a safe, fun, positive, and
+   inclusive environment within BC Rugby and all of BC Rugby's programs, competitions, events,
+   and activities.").
+
+3. **"modifications to make... competitions, programs, and events accessible to Players and
+   Participants of all abilities"** (Members with Disabilities card) — Source: **BC Rugby Code of
+   Conduct**, §4.1(d), same PDF. Verified verbatim; the elided text is "BC Rugby" (i.e. the full
+   clause reads "...make or provide modifications to make **BC Rugby** competitions, programs,
+   and events accessible...").
+
+4. **"demonstrate respect for the diversity of Participants, and act to correct or prevent
+   practices that are unjustly discriminatory"** (Racialized Communities card) — Source: **BC
+   Rugby Code of Conduct**, §4.1(c), same PDF. Verified verbatim, exact match, no changes needed.
+
+5. **Land acknowledgement** (Indigenous Members card) — Source: **BC Rugby**, published site-wide
+   (confirmed independently on the `www.bcrugby.com` homepage, the `bcrugby.com/governance/`
+   page, and printed on the cover of the Code of Conduct PDF above, all with identical wording):
+   > BC Rugby gratefully acknowledges that its offices reside on the traditional and unceded
+   > territory of the Coast Salish Peoples, including the territories of the xʷməθkwəy̓əm
+   > (Musqueam), Skwxwú7mesh (Squamish) and Səl̓ílwətaʔ/Selilwitulh (Tsleil-Waututh) Nations.
+
+   The page previously said "Like BC Rugby, we recognize that Kats' training and matches take
+   place on..." those same three Nations' territory — the **Nations named were correct**, but BC
+   Rugby's actual acknowledgement is about where its **offices** sit, not a general statement
+   about where rugby is played. The card was reworded to quote BC Rugby's real sentence exactly
+   (attributed to BC Rugby) and to make the training/matches claim **the Kats' own** statement,
+   not something attributed to BC Rugby.
+
+6. **"all individuals deserve respectful and inclusive environments for participation that value
+   the individual's gender identity and gender expression"** (2SLGBTQIA+ Members card) — Source:
+   **Rugby Canada's Trans Inclusion Policy** (approved January 1, 2019) —
+   `https://rugby.ca/uploads/Documents/TransInclusionPolicyEN_DEV_POL_20190101_FINAL.pdf`,
+   §3 ("Purpose"). Verified verbatim by downloading the PDF and extracting its text.
+   **This corrects a misattribution**: the quote was previously credited to "BC Rugby's Gender
+   Equity, Diversity and Inclusion Policy." That policy is real and is listed as one of BC Rugby's
+   own Supporting Policies in the Code of Conduct (§10) at
+   `https://bcrugby.com/wp-content/uploads/2021/05/BC-Rugby-Gender-Equity-Diversity-and-Inclusion-Policy.pdf`
+   — but that specific URL (and every other `bcrugby.com/wp-content/uploads/*` PDF) consistently
+   returns `403 Forbidden` to direct requests, browser-UA `curl`, a headless Chromium fetch, and
+   even the Wayback Machine's cached copy, so its actual text could not be read to confirm the
+   quote appears there. The quote's exact wording, however, was confirmed verbatim in Rugby
+   Canada's own Trans Inclusion Policy, so the card now cites that document (the national policy
+   BC Rugby operates under) instead of asserting a match against a BC Rugby document that
+   couldn't be opened.
+
+If BC Rugby ever unblocks direct access to its `wp-content/uploads` PDFs, it would be worth
+re-checking whether the BC Rugby Gender Equity, Diversity and Inclusion Policy also contains this
+sentence (it's plausible BC Rugby adopted it directly, the way its Code of Conduct explicitly
+incorporates the national UCCMS/provincial BCUCC frameworks) — if so, item 6 above could cite BC
+Rugby's own document directly instead.
+
 ## Forms
 
 Two kinds of form appear on the site, matching the original:
