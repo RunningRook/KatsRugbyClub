@@ -14,8 +14,11 @@ dollars a year on any static host.
 ├── about-us.html            About Us
 ├── history.html             History
 ├── join-our-team.html       Join Our Team
+├── diversity-and-inclusion.html  Diversity & Inclusion
 ├── contact.html              Contact (full form + map)
 ├── 2023-24-season.html      Fixtures & Results (live BC Rugby link-out only; filename kept from the live site's URL)
+├── robots.txt               Allows all crawlers, points at sitemap.xml
+├── sitemap.xml              Lists all 7 pages for search engines
 ├── assets/
 │   ├── css/style.css        Single shared stylesheet (brand colours, layout, responsive rules)
 │   ├── js/main.js           Mobile nav toggle + progressive-enhancement form submission
@@ -42,6 +45,37 @@ Colours were sampled directly from the club crest (`assets/img/kats-logo.png`):
 Headings use **Poppins** (a free geometric sans similar in spirit to the Futura family the
 original site used); body text uses **Inter**. Both are loaded from Google Fonts — remove the
 `<link>` tags in each page's `<head>` if you'd rather self-host fonts or drop them entirely.
+
+## SEO
+
+Every page now carries the tags search engines and social platforms actually use:
+
+- **Unique `<title>` and meta description per page** (already existed from the initial rebuild).
+- **Open Graph tags** (`og:type`, `og:description`, `og:url`, `og:image`) on every page, not just
+  the homepage — this is what controls the preview card when a link is shared on Facebook, group
+  chats, Slack, etc. Each page uses a relevant photo where one exists (e.g. `about-us.html` uses
+  the team photo); pages without a unique photo fall back to the crest-on-photo image.
+- **Twitter/X Card tags** (`twitter:card`, `twitter:title`, `twitter:description`, `twitter:image`)
+  — same idea, for X share previews specifically.
+- **Canonical URLs** (`<link rel="canonical">`) on every page, pointed at `https://www.katsrugbyclub.com/...`
+  — this assumes the club keeps its existing domain. **If the domain ever changes, every
+  `og:url`/`og:image`/`twitter:image`/canonical URL (and `sitemap.xml`, and the `Sitemap:` line in
+  `robots.txt`) needs updating to match** — search `katsrugbyclub.com` across the repo to find them
+  all.
+- **`theme-color`** (`#056839`, the brand green) — tints the browser chrome/status bar on mobile.
+- **Structured data (JSON-LD)** on the homepage: a `SportsOrganization` schema with the club's
+  real name, address, phone, email, and social links (`sameAs`). This is what can make Google show
+  a richer result (logo, contact info) rather than a plain blue link, and helps local searches like
+  "rugby club Vancouver."
+- **`robots.txt`** — allows all crawlers and points at `sitemap.xml`.
+- **`sitemap.xml`** — lists all 7 pages so search engines can discover them without waiting to
+  find internal links. Re-submit it in Google Search Console after the domain goes live (see
+  "Manual steps" below), and add a new `<url>` entry here any time a page is added.
+
+**Not done, and why:** a `<title>`/meta-description rewrite for `index.html` to match the other
+pages exactly wasn't made — its title ("Home | Kitsilano Kats Rugby") differs intentionally,
+since "Kitsilano" is a real, searched Vancouver neighbourhood and keeping it can help local search
+even though it doesn't match the "... | Kats Rugby Club" pattern used elsewhere.
 
 ## Fixtures, Results &amp; Registration (PlayHQ)
 
@@ -354,3 +388,9 @@ request — that page now only links out to BC Rugby's live fixtures/results.
    Registration (PlayHQ)" above).
 5. Optionally set up free HTTPS (Netlify/GitHub Pages both auto-provision this; a shared host may
    need a free Let's Encrypt certificate enabled in its control panel).
+6. **Once the domain is live on the new host**, submit `sitemap.xml` in
+   [Google Search Console](https://search.google.com/search-console) (Sitemaps → enter
+   `sitemap.xml` → Submit) and [Bing Webmaster Tools](https://www.bing.com/webmasters) — this gets
+   all 7 pages crawled and indexed much faster than waiting for search engines to find them on
+   their own. See the "SEO" section above for what's already in place, and what to update if the
+   domain ever changes.
