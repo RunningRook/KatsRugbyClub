@@ -8,10 +8,9 @@
 (function () {
   "use strict";
 
-  // TODO: after you deploy the Worker (see worker/README.md), replace this
-  // with its real URL — either the workers.dev URL wrangler prints, or a
-  // custom domain/route you've attached (e.g. https://checkin-api.katsrugbyclub.com).
-  var API_BASE = "https://kats-checkin-api.YOUR-SUBDOMAIN.workers.dev";
+  // Swap this if you later attach a custom domain/route in Cloudflare
+  // (e.g. https://checkin-api.katsrugbyclub.com) instead of workers.dev.
+  var API_BASE = "https://kats-checkin-api.katsrfc.workers.dev";
 
   var POLL_MS = 12000;
 
