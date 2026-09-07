@@ -327,6 +327,32 @@
 .tally-group-label.in { color: var(--rsvp-in); }
 .tally-group-label.maybe { color: var(--rsvp-maybe); }
 .tally-group-label.out { color: var(--rsvp-out); }
+.tally-group-label.noresponse { color: var(--rsvp-pending); text-transform: none; }
+
+.tally-name {
+  color: var(--ink-soft);
+}
+
+/* Admin-only: a squad member's name inside a fixture's status list,
+   clickable to check them in/out on their behalf. Underline (not a
+   pill/button look) keeps it reading as text-with-affordance rather
+   than competing with the real buttons on the page. */
+.tally-name-admin {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--ink-soft);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.tally-name-admin:hover,
+.tally-name-admin:focus-visible {
+  color: var(--kats-green);
+}
 
 /* ---------- roster ---------- */
 

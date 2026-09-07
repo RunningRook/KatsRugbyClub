@@ -210,27 +210,43 @@
   }
 
   // ---------- games ----------
+  var GROUP_LABELS = { in: "In", maybe: "Maybe", out: "Out", noresponse: "No response" };
+
+  function nameToken(name, playerId, gameId) {
+    var label = escapeHtml(name);
+    if (!state.isAdmin) return '<span class="tally-name">' + label + "</span>";
+    // Admin-only: click a name (in any group, including "no response") to
+    // set that player's status on their behalf — same write the player's
+    // own In/Maybe/Out buttons make, just admin-initiated.
+    return '<button type="button" class="tally-name tally-name-admin" data-action="admin-set-status" ' +
+      'data-game-id="' + gameId + '" data-player-id="' + playerId + '" data-player-name="' + label + '">' + label + "</button>";
+  }
+
   function gameCardHtml(g, isPast) {
-    var avail = state.availability.filter(function (a) { return a.gameId === g.id; });
-    var counts = { in: 0, maybe: 0, out: 0 };
-    var groups = { in: [], maybe: [], out: [] };
-    var respondedIds = {};
-    avail.forEach(function (a) {
-      if (counts[a.status] !== undefined) {
-        counts[a.status]++;
-        groups[a.status].push(a.playerName);
-        respondedIds[a.playerId] = true;
-      }
+    var availByPlayer = {};
+    state.availability.forEach(function (a) {
+      if (a.gameId === g.id) availByPlayer[a.playerId] = a;
     });
-    var noResponse = Math.max(state.roster.length - Object.keys(respondedIds).length, 0);
-    var mine = state.me ? avail.filter(function (a) { return a.playerId === state.me.id; })[0] : null;
+
+    // Group the WHOLE roster by status, not just whoever has responded —
+    // everyone lands in "in" / "maybe" / "out" / "noresponse".
+    var groups = { in: [], maybe: [], out: [], noresponse: [] };
+    state.roster.forEach(function (p) {
+      var a = availByPlayer[p.id];
+      var status = (a && groups[a.status]) ? a.status : "noresponse";
+      groups[status].push(p);
+    });
+
+    var counts = { in: groups.in.length, maybe: groups.maybe.length, out: groups.out.length };
+    var noResponse = groups.noresponse.length;
+    var mine = state.me ? availByPlayer[state.me.id] : null;
     var myStatus = mine ? mine.status : null;
     var dp = formatDateParts(g.date);
 
-    var detailHtml = ["in", "maybe", "out"].map(function (s) {
+    var detailHtml = state.roster.length === 0 ? "" : ["in", "maybe", "out", "noresponse"].map(function (s) {
       if (!groups[s].length) return "";
-      return '<div class="tally-group"><span class="tally-group-label ' + s + '">' + s + "</span><span>" +
-        groups[s].map(escapeHtml).join(", ") + "</span></div>";
+      var names = groups[s].map(function (p) { return nameToken(p.name, p.id, g.id); }).join(", ");
+      return '<div class="tally-group"><span class="tally-group-label ' + s + '">' + GROUP_LABELS[s] + "</span><span>" + names + "</span></div>";
     }).join("");
 
     return (
@@ -264,7 +280,7 @@
             (noResponse > 0 ? '<span class="tally-pill pending">' + noResponse + " no reply</span>" : "") +
             '<span class="tally-caret">▾</span>' +
           "</button>" +
-          '<div class="tally-detail" hidden>' + (detailHtml || '<span class="tally-group" style="color:var(--ink-soft);">No responses yet.</span>') + "</div>" +
+          '<div class="tally-detail" hidden>' + (detailHtml || '<span class="tally-group" style="color:var(--ink-soft);">No squad members yet.</span>') + "</div>" +
         "</div>" +
       "</article>"
     );
@@ -439,6 +455,23 @@
   }
   function closeGameForm() { $("#gameFormModal").hidden = true; }
 
+  // ---------- admin: set a player's status on their behalf ----------
+  var playerStatusTarget = null;
+  function openPlayerStatusModal(gameId, playerId, playerName) {
+    playerStatusTarget = { gameId: gameId, playerId: playerId, playerName: playerName };
+    $("#playerStatusHint").textContent = "Checking in " + playerName + " for this fixture.";
+    var current = state.availability.filter(function (a) { return a.gameId === gameId && a.playerId === playerId; })[0];
+    var currentStatus = current ? current.status : null;
+    $all("#playerStatusButtons .rsvp-btn").forEach(function (btn) {
+      btn.classList.toggle("active", btn.getAttribute("data-status") === currentStatus);
+    });
+    $("#playerStatusModal").hidden = false;
+  }
+  function closePlayerStatusModal() {
+    $("#playerStatusModal").hidden = true;
+    playerStatusTarget = null;
+  }
+
   // ---------- data loading ----------
   // `background: true` is for the polling timer, once we're already
   // unlocked: swallow errors into a banner rather than kicking the viewer
@@ -523,6 +556,11 @@
       }
       var editBtn = e.target.closest("[data-action='edit-game']");
       if (editBtn) { openGameForm(editBtn.getAttribute("data-id")); return; }
+      var nameBtn = e.target.closest("[data-action='admin-set-status']");
+      if (nameBtn) {
+        openPlayerStatusModal(nameBtn.getAttribute("data-game-id"), nameBtn.getAttribute("data-player-id"), nameBtn.getAttribute("data-player-name"));
+        return;
+      }
     }
     $("#gamesList").addEventListener("click", handleGamesClick);
     $("#pastList").addEventListener("click", handleGamesClick);
@@ -658,6 +696,24 @@
     });
     $("#confirmCancelBtn").addEventListener("click", closeConfirm);
 
+    $("#playerStatusCloseBtn").addEventListener("click", closePlayerStatusModal);
+    $("#playerStatusButtons").addEventListener("click", function (e) {
+      var btn = e.target.closest(".rsvp-btn");
+      if (!btn || !playerStatusTarget) return;
+      var status = btn.getAttribute("data-status");
+      var target = playerStatusTarget;
+      api("/api/availability", { method: "POST", body: { gameId: target.gameId, playerId: target.playerId, playerName: target.playerName, status: status } })
+        .then(function () {
+          closePlayerStatusModal();
+          showToast(target.playerName + " checked in as " + status.charAt(0).toUpperCase() + status.slice(1) + ".");
+          loadState({ background: true });
+        })
+        .catch(function (e2) {
+          console.error(e2);
+          showToast("Couldn't update — try again.");
+        });
+    });
+
     $all(".modal-overlay").forEach(function (overlay) {
       overlay.addEventListener("click", function (e) {
         if (e.target !== overlay) return;
@@ -665,6 +721,7 @@
         if (overlay.id === "adminModal") closeAdminModal();
         if (overlay.id === "gameFormModal") closeGameForm();
         if (overlay.id === "confirmModal") closeConfirm();
+        if (overlay.id === "playerStatusModal") closePlayerStatusModal();
       });
     });
   }

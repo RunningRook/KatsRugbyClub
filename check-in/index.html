@@ -248,6 +248,22 @@
     </div>
   </div>
 
+  <!-- PLAYER STATUS MODAL (admin: check a player in/out/maybe on their behalf) -->
+  <div id="playerStatusModal" class="modal-overlay" hidden>
+    <div class="modal" style="max-width:360px;">
+      <div class="modal-head">
+        <h2>Set availability</h2>
+        <button id="playerStatusCloseBtn" class="icon-btn small" aria-label="Close">✕</button>
+      </div>
+      <p class="hint" id="playerStatusHint"></p>
+      <div class="rsvp-row" id="playerStatusButtons" role="group" aria-label="Availability">
+        <button type="button" class="rsvp-btn rsvp-in" data-status="in">In</button>
+        <button type="button" class="rsvp-btn rsvp-maybe" data-status="maybe">Maybe</button>
+        <button type="button" class="rsvp-btn rsvp-out" data-status="out">Out</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <footer class="site-footer">
