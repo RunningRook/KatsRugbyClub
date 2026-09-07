@@ -90,6 +90,28 @@
     pendingConfirm = null;
   }
 
+  // ---------- clipboard ----------
+  function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    // Fallback for browsers/contexts without the Clipboard API.
+    return new Promise(function (resolve, reject) {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        ok ? resolve() : reject(new Error("execCommand failed"));
+      } catch (e) { reject(e); }
+    });
+  }
+
   // ---------- API helper ----------
   function api(path, options) {
     options = options || {};
@@ -543,6 +565,14 @@
           showToast("Admin mode unlocked.");
         })
         .catch(function (e) { err.textContent = e.message || "That PIN isn't right."; });
+    });
+
+    $("#copyLinkBtn").addEventListener("click", function () {
+      if (!state.accessKey) { showToast("Couldn't build the link — try reloading the page."); return; }
+      var link = window.location.origin + window.location.pathname + "?key=" + encodeURIComponent(state.accessKey);
+      copyToClipboard(link)
+        .then(function () { showToast("Link copied — paste it in your group chat!"); })
+        .catch(function () { window.prompt("Copy this link:", link); });
     });
 
     $("#panelSaveNameBtn").addEventListener("click", function () {
