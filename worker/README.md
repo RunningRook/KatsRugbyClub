@@ -140,3 +140,73 @@ in the `config` table. A correct PIN mints a random bearer token stored in
 change the PIN or team name). Tokens expire after 30 days. This is real
 server-side enforcement — unlike a client-only check, someone can't bypass
 it just by reading the page's source.
+
+## PlayHQ live fixtures & ladder
+
+This same Worker also serves `/playhq/fixtures` and `/playhq/ladder` —
+**public**, un-gated endpoints (no `ACCESS_KEY` needed) that back the live
+widget on `2023-24-season.html` and the "Next up" line on `index.html` (see
+`assets/js/playhq.js`). They're a thin proxy + cache in front of PlayHQ's
+own External API, so the club's PlayHQ API key stays a server-side secret
+and PlayHQ isn't hit on every single page load — see the big comment above
+`handlePlayhq()` in `src/index.js` for how the org → season → team → grade
+lookup works and how it's cached in the `playhq_cache` D1 table.
+
+**This could not be tested end-to-end before it shipped** — same root
+cause as "I can't run these commands myself" above, except here it's not
+just Wrangler: this build environment's network is blocked from reaching
+`playhq.com` at all (confirmed by a direct `curl`, which failed at the
+egress proxy, not at PlayHQ). So while the *endpoint paths* below come
+directly from the API guide the club was given (each doc link's URL
+literally spells out `/v1/organisations/:id/seasons` etc.), the exact
+*field names* in each JSON response (`homeTeam` vs `HomeTeam` vs something
+else entirely) are a best-effort guess from PlayHQ's public docs, not a
+verified match. `pick()` in `src/index.js` hedges by trying several likely
+spellings per field, and everything degrades safely if it's wrong — a bad
+guess just means the widget silently stays hidden, not a broken page (see
+the comment at the top of `assets/js/playhq.js`).
+
+**Setup (once):**
+
+1. **Set the API key as a secret — never commit it to this repo:**
+   ```bash
+   wrangler secret put PLAYHQ_API_KEY
+   # paste the key you were given when prompted
+   ```
+2. `PLAYHQ_TENANT`, `PLAYHQ_ORG_ID` and `PLAYHQ_TEAM_MATCH` are already set
+   as plain vars in `wrangler.toml` (they're not sensitive — the org ID is
+   already published in this repo's root `README.md`). Only change
+   `PLAYHQ_TEAM_MATCH` if "kats" ever stops uniquely matching the right
+   team in PlayHQ's team list for the season.
+3. Apply the schema update for the new `playhq_cache` table (safe to
+   re-run — same command as step 3 above):
+   ```bash
+   wrangler d1 execute kats-checkin --remote --file=./schema.sql
+   ```
+4. `wrangler deploy`.
+
+**Verify it actually worked** — this is the step that stands in for the
+testing this build environment couldn't do:
+
+```bash
+curl "https://kats-checkin-api.katsrfc.workers.dev/playhq/fixtures"
+curl "https://kats-checkin-api.katsrfc.workers.dev/playhq/ladder"
+```
+
+- Games/ladder rows with real teams, dates and scores → it worked, nothing
+  more to do.
+- `{"error": "..."}`, or `{"games": []}` / `{"ladder": []}` → open
+  `https://kats-checkin-api.katsrfc.workers.dev/playhq/debug?key=YOUR_ACCESS_KEY`
+  (reuses the check-in `ACCESS_KEY` from step 4 above, just to keep this
+  worker from being usable as a free anonymous PlayHQ proxy). It dumps the
+  resolved season/team/grade IDs plus PlayHQ's raw, unmodified JSON for the
+  games and ladder calls. Compare that raw JSON's actual field names
+  against `normalizeGame()` / `normalizeLadderRow()` / `resolveKatsGrade()`
+  in `src/index.js`, fix whichever `pick(...)` lines guessed wrong, and
+  `wrangler deploy` again. If it's an authorization error instead, double
+  check the API key and `x-phq-tenant` value (`rca`) are exactly what the
+  club was given.
+
+If you'd rather not deal with any of this, the site works fine without
+it — the widget just never appears and the existing "View on BC Rugby"
+link-out card (already there regardless) stays the only fixtures/ladder UI.

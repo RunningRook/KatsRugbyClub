@@ -16,12 +16,13 @@ dollars a year on any static host.
 ├── join-our-team.html       Join Our Team
 ├── diversity-and-inclusion.html  Diversity & Inclusion
 ├── contact.html              Contact (full form + map)
-├── 2023-24-season.html      Fixtures & Results (live BC Rugby link-out only; filename kept from the live site's URL)
+├── 2023-24-season.html      Fixtures & Results (BC Rugby link-out + live PlayHQ widget; filename kept from the live site's URL)
 ├── robots.txt               Allows all crawlers, points at sitemap.xml
 ├── sitemap.xml              Lists all 7 pages for search engines
 ├── assets/
 │   ├── css/style.css        Single shared stylesheet (brand colours, layout, responsive rules)
 │   ├── js/main.js           Mobile nav toggle + progressive-enhancement form submission
+│   ├── js/playhq.js         Live fixtures/ladder widget (calls the Worker's /playhq/* endpoints)
 │   └── img/                 All images used on the site (crests, photos, opponent logos, favicon)
 ├── check-in/                Team Check-In tool (fixtures + roster + In/Out/Maybe) — see below
 ├── worker/                  Its small Cloudflare Worker + D1 backend — see worker/README.md
@@ -141,13 +142,19 @@ https://www.bcrugby.com/fixtures---results0adb61e3
 ```
 
 BC Rugby's page is itself powered by PlayHQ's data underneath, but the club wanted the visible
-link to be BC Rugby's own branded page rather than PlayHQ directly. **A live, client-side
-fixtures/ladder widget pulling this data automatically was investigated but is on hold**: BC
-Rugby's page calls a CORS-open PlayHQ API (so it *can* legitimately be called from another site's
-JavaScript, unlike the blocked iframe approach), but doing so needs a PlayHQ API key and the
-Kats' specific Division 2 team ID, neither of which exist yet. Once the club has requested and
-received those from PlayHQ/BC Rugby, a live widget can replace this link-out card — until then,
-linking straight to BC Rugby's page is the correct, zero-maintenance option.
+link to be BC Rugby's own branded page rather than PlayHQ directly, so this link-out card stays
+either way.
+
+**A live fixtures/ladder widget now sits alongside it.** The club obtained a PlayHQ API key,
+tenant (`rca`) and organisation ID, so `2023-24-season.html` (fixtures + ladder) and `index.html`
+("Next up" teaser) now also pull live data via `assets/js/playhq.js`, which talks to the
+Cloudflare Worker's `/playhq/fixtures` and `/playhq/ladder` endpoints (the same Worker that backs
+`/check-in/` — see `worker/README.md`'s "PlayHQ live fixtures & ladder" section for setup,
+verification steps, and an important caveat: this build environment can't reach `playhq.com` at
+all, so the response field-name mapping is a best-effort guess from PlayHQ's docs, not verified
+against a live call — the widget is written to degrade to simply staying hidden if that guess is
+wrong, rather than showing broken data). **The PlayHQ API key itself is a Worker secret, never
+committed to this repo** — same pattern as the check-in tool's `ACCESS_KEY`.
 
 ### How this was verified (so it doesn't get pasted-in blind next season)
 

@@ -73,6 +73,30 @@
             </a>
           </div>
         </div>
+
+        <!-- Live PlayHQ widget: progressive enhancement in front of the
+             link-out card above, filled in by assets/js/playhq.js talking to
+             the Worker's public /playhq/fixtures + /playhq/ladder endpoints.
+             Both blocks start hidden and only appear once real data loads —
+             see worker/README.md's "PlayHQ live fixtures & ladder" section. -->
+        <div class="playhq-widget" id="playhq-widget-fixtures" hidden style="margin-top:40px;">
+          <h3>Upcoming &amp; Recent</h3>
+          <div class="fixtures-list" id="playhq-fixtures"></div>
+        </div>
+
+        <div class="playhq-widget" id="playhq-widget-ladder" hidden style="margin-top:40px;">
+          <h3>Ladder</h3>
+          <div class="ladder-table-wrap">
+            <table class="ladder-table" id="playhq-ladder">
+              <thead>
+                <tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>PF</th><th>PA</th><th>Pts</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <p class="playhq-widget-updated" id="playhq-updated" hidden></p>
       </div>
     </section>
 
@@ -157,6 +181,7 @@
   </footer>
 
   <script src="assets/js/main.js"></script>
+  <script src="assets/js/playhq.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>

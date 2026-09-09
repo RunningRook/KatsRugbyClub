@@ -623,6 +623,68 @@ textarea {
   vertical-align: middle;
 }
 
+/* ---------- Live PlayHQ widget ---------- */
+/* Progressive enhancement in front of the .playhq-card link-out above: if
+   assets/js/playhq.js can't reach the Worker (or the Worker can't reach
+   PlayHQ), this whole block just stays hidden and the link-out card is the
+   only thing anyone sees -- see worker/README.md. */
+
+.playhq-widget[hidden] { display: none; }
+
+.playhq-widget-status {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin: 10px 0 0;
+}
+
+/* On the dark homepage card, match its own text treatment instead of the
+   default ink-soft (too low-contrast on the green gradient background). */
+.playhq-card .playhq-widget-status {
+  color: var(--kats-gold);
+  font-weight: 600;
+  margin-top: 14px;
+}
+
+.playhq-widget-updated {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  margin: 24px 0 0;
+}
+
+.ladder-table-wrap { overflow-x: auto; }
+
+.ladder-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.ladder-table th,
+.ladder-table td {
+  padding: 10px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.ladder-table th:nth-child(2),
+.ladder-table td:nth-child(2) {
+  text-align: left;
+  white-space: normal;
+}
+
+.ladder-table thead th {
+  font-family: var(--font-head);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.ladder-table tbody tr.is-kats { background: rgba(215, 146, 44, 0.14); }
+.ladder-table tbody tr.is-kats td:nth-child(2) { font-weight: 700; }
+.ladder-table td.ladder-points { font-weight: 700; color: var(--kats-green); }
+
 /* ---------- Utility ---------- */
 
 .text-center { text-align: center; }

@@ -8,3 +8,12 @@ compatibility_date = "2024-09-23"
 binding = "DB"
 database_name = "kats-checkin"
 database_id = "2fda50d6-8a31-4e5a-822f-b4f66a2ceae5"
+
+# Non-secret PlayHQ config for the public /playhq/fixtures + /playhq/ladder
+# proxy -- org id and tenant are already published in README.md, so they're
+# plain vars here, not secrets. The API key itself is NOT here -- set it with
+# `wrangler secret put PLAYHQ_API_KEY` (see worker/README.md).
+[vars]
+PLAYHQ_TENANT = "rca"
+PLAYHQ_ORG_ID = "0ab94db6-f0cb-4454-95d8-90b8b05150b3"
+PLAYHQ_TEAM_MATCH = "kats"

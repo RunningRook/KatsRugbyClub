@@ -25,8 +25,11 @@ const ALLOWED_ORIGINS = [
 const PIN_SALT = "kats-checkin-v1";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-function corsHeaders(origin) {
-  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+function corsHeaders(origin, isPublic) {
+  // /playhq/* is public sport data meant for any page that wants to embed
+  // it, not just this site -- open CORS. Everything else (the check-in
+  // tool) stays locked to ALLOWED_ORIGINS.
+  const allow = isPublic ? "*" : ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
@@ -36,12 +39,12 @@ function corsHeaders(origin) {
   };
 }
 
-function json(data, init, origin) {
+function json(data, init, origin, isPublic) {
   return new Response(JSON.stringify(data), {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...corsHeaders(origin),
+      ...corsHeaders(origin, isPublic),
       ...(init && init.headers),
     },
   });
@@ -110,14 +113,235 @@ function safeEqual(a, b) {
   return diff === 0;
 }
 
+// ---------- PlayHQ (public fixtures/ladder proxy) ----------
+//
+// Read-only proxy + short-lived cache in front of PlayHQ's public External
+// API (docs.playhq.com/tech/api/playhq-external-api), so the club's API key
+// stays a server-side secret and the public fixtures page isn't calling
+// PlayHQ on every single page load. See README.md's "Fixtures, Results &
+// Registration (PlayHQ)" section for how the org id was verified, and
+// worker/README.md for exactly what could and couldn't be tested from this
+// build environment before it shipped.
+//
+// IMPORTANT CAVEAT: this build environment's network can't reach
+// playhq.com at all (same restriction documented for Wrangler itself), so
+// the field names pulled out of each PlayHQ response below (homeTeam,
+// startTime, points, etc.) are a best-effort reading of PlayHQ's own docs
+// and support articles, NOT verified against a real response. `pick()`
+// hedges by trying several plausible spellings per field, and
+// GET /playhq/debug dumps the raw upstream JSON so a wrong guess can be
+// fixed by editing normalizeGame/normalizeLadderRow below, without
+// touching anything else.
+
+const PLAYHQ_HOST = "https://api.caprod.playhq.com";
+const PLAYHQ_RESOLVE_TTL_MS = 24 * 60 * 60 * 1000; // season/team/grade rarely change
+const PLAYHQ_DATA_TTL_MS = 10 * 60 * 1000; // fixtures/ladder can move on match day
+
+async function playhqFetch(env, path) {
+  if (!env.PLAYHQ_API_KEY) {
+    throw new Error("Server not configured: run `wrangler secret put PLAYHQ_API_KEY` (see worker/README.md).");
+  }
+  const res = await fetch(PLAYHQ_HOST + path, {
+    headers: {
+      "x-api-key": env.PLAYHQ_API_KEY,
+      "x-phq-tenant": env.PLAYHQ_TENANT || "rca",
+      Accept: "application/json",
+    },
+  });
+  const text = await res.text();
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch (e) {
+    body = text;
+  }
+  if (!res.ok) {
+    const msg = body && typeof body === "object" && body.message ? body.message : String(text).slice(0, 200);
+    throw new Error(`PlayHQ ${path} -> HTTP ${res.status}: ${msg}`);
+  }
+  return body;
+}
+
+// PlayHQ's docs show list endpoints returning a bare array in some places
+// and a wrapper object in others -- unwrap defensively rather than assume.
+function asArray(body) {
+  if (Array.isArray(body)) return body;
+  if (body && Array.isArray(body.data)) return body.data;
+  if (body && Array.isArray(body.results)) return body.results;
+  return [];
+}
+
+// Reads `obj.a.b` for the first key path (dot-separated) that resolves to a
+// non-empty value. Used to hedge against unverified field-name casing (see
+// caveat above) -- e.g. pick(game, ["homeTeam.name", "HomeTeam.Name"]).
+function pick(obj, keyPaths) {
+  for (const keyPath of keyPaths) {
+    const val = keyPath.split(".").reduce((o, k) => (o && typeof o === "object" ? o[k] : undefined), obj);
+    if (val !== undefined && val !== null && val !== "") return val;
+  }
+  return undefined;
+}
+
+async function cacheGet(db, key, ttlMs) {
+  const row = await db.prepare("SELECT payload, fetched_at FROM playhq_cache WHERE cache_key = ?").bind(key).first();
+  if (!row) return null;
+  return { data: JSON.parse(row.payload), fresh: Date.now() - row.fetched_at < ttlMs };
+}
+
+async function cacheSet(db, key, data) {
+  await db
+    .prepare(
+      "INSERT INTO playhq_cache (cache_key, payload, fetched_at) VALUES (?,?,?) " +
+        "ON CONFLICT(cache_key) DO UPDATE SET payload=excluded.payload, fetched_at=excluded.fetched_at"
+    )
+    .bind(key, JSON.stringify(data), Date.now())
+    .run();
+}
+
+// Org -> current season -> Kats team -> grade. Cached for a day since none
+// of this changes mid-week; a season rollover just means the next refresh
+// after the cache expires picks up the new one.
+async function resolveKatsGrade(env, db) {
+  const cached = await cacheGet(db, "resolved_grade", PLAYHQ_RESOLVE_TTL_MS);
+  if (cached && cached.fresh) return cached.data;
+
+  const orgId = env.PLAYHQ_ORG_ID;
+  const teamMatch = (env.PLAYHQ_TEAM_MATCH || "kats").toLowerCase();
+
+  const seasons = asArray(await playhqFetch(env, `/v1/organisations/${orgId}/seasons`));
+  if (!seasons.length) throw new Error("PlayHQ returned no seasons for this organisation (see /playhq/debug).");
+  const season =
+    seasons.find((s) => /active|current/i.test(String(pick(s, ["status", "Status"]) || ""))) ||
+    seasons.slice().sort((a, b) => new Date(pick(b, ["startDate", "StartDate"]) || 0) - new Date(pick(a, ["startDate", "StartDate"]) || 0))[0];
+  const seasonId = pick(season, ["id", "Id", "ID"]);
+  if (!seasonId) throw new Error("Couldn't find an id on a PlayHQ season (see /playhq/debug).");
+
+  const teams = asArray(await playhqFetch(env, `/v1/seasons/${seasonId}/teams`));
+  const team = teams.find((t) => String(pick(t, ["name", "Name"]) || "").toLowerCase().includes(teamMatch));
+  if (!team) throw new Error(`No PlayHQ team matching "${teamMatch}" in season ${seasonId} (see /playhq/debug).`);
+  const teamId = pick(team, ["id", "Id", "ID"]);
+  const teamName = pick(team, ["name", "Name"]);
+
+  let gradeId = pick(team, ["grade.id", "Grade.Id", "gradeId", "GradeId", "competition.grade.id"]);
+  let gradeName = pick(team, ["grade.name", "Grade.Name", "gradeName", "GradeName"]);
+
+  if (!gradeId) {
+    const grades = asArray(await playhqFetch(env, `/v1/seasons/${seasonId}/grades`));
+    const grade = (gradeName && grades.find((g) => String(pick(g, ["name", "Name"]) || "") === gradeName)) || grades[0];
+    if (!grade) throw new Error(`Couldn't resolve a PlayHQ grade for team "${teamName}" (see /playhq/debug).`);
+    gradeId = pick(grade, ["id", "Id", "ID"]);
+    gradeName = gradeName || pick(grade, ["name", "Name"]);
+  }
+  if (!gradeId) throw new Error("Couldn't resolve a PlayHQ grade id (see /playhq/debug).");
+
+  const resolved = { seasonId, teamId, teamName, gradeId, gradeName };
+  await cacheSet(db, "resolved_grade", resolved);
+  return resolved;
+}
+
+function normalizeGame(g) {
+  return {
+    id: pick(g, ["id", "Id", "ID"]),
+    round: pick(g, ["round.name", "Round.Name", "round", "Round"]),
+    date: pick(g, ["date", "Date", "startTime", "StartTime", "scheduledAt", "ScheduledAt"]),
+    status: pick(g, ["status", "Status"]),
+    venue: pick(g, ["venue.name", "Venue.Name", "venue", "Venue", "ground.name"]),
+    homeTeam: pick(g, ["homeTeam.name", "HomeTeam.Name", "homeTeamName", "HomeTeamName"]),
+    awayTeam: pick(g, ["awayTeam.name", "AwayTeam.Name", "awayTeamName", "AwayTeamName"]),
+    homeScore: pick(g, ["homeScore", "HomeScore", "results.home.score", "home.score"]),
+    awayScore: pick(g, ["awayScore", "AwayScore", "results.away.score", "away.score"]),
+  };
+}
+
+function normalizeLadderRow(r) {
+  return {
+    position: pick(r, ["position", "Position", "rank", "Rank"]),
+    team: pick(r, ["team.name", "Team.Name", "teamName", "TeamName", "name", "Name"]),
+    played: pick(r, ["played", "Played", "statistics.played"]),
+    won: pick(r, ["won", "Won", "wins", "statistics.won"]),
+    lost: pick(r, ["lost", "Lost", "losses", "statistics.lost"]),
+    drawn: pick(r, ["drawn", "Drawn", "draws", "statistics.drawn"]),
+    byes: pick(r, ["byes", "Byes", "statistics.byes"]),
+    points: pick(r, ["points", "Points", "competitionPoints", "statistics.points"]),
+    pointsFor: pick(r, ["pointsFor", "PointsFor", "for", "statistics.for"]),
+    pointsAgainst: pick(r, ["pointsAgainst", "PointsAgainst", "against", "statistics.against"]),
+  };
+}
+
+async function handlePlayhq(request, env, db, path, origin) {
+  try {
+    if (path === "/playhq/fixtures" && request.method === "GET") {
+      const cached = await cacheGet(db, "fixtures", PLAYHQ_DATA_TTL_MS);
+      if (cached && cached.fresh) return json(cached.data, { status: 200 }, origin, true);
+      try {
+        const resolved = await resolveKatsGrade(env, db);
+        const games = asArray(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`)).map(normalizeGame);
+        const payload = { team: { id: resolved.teamId, name: resolved.teamName }, grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), games };
+        await cacheSet(db, "fixtures", payload);
+        return json(payload, { status: 200 }, origin, true);
+      } catch (err) {
+        // Serve stale-but-cached data over a hard error when we have it.
+        if (cached) return json({ ...cached.data, stale: true, error: err.message }, { status: 200 }, origin, true);
+        return json({ error: err.message }, { status: 502 }, origin, true);
+      }
+    }
+
+    if (path === "/playhq/ladder" && request.method === "GET") {
+      const cached = await cacheGet(db, "ladder", PLAYHQ_DATA_TTL_MS);
+      if (cached && cached.fresh) return json(cached.data, { status: 200 }, origin, true);
+      try {
+        const resolved = await resolveKatsGrade(env, db);
+        const ladder = asArray(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/ladder`)).map(normalizeLadderRow);
+        const payload = { grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), ladder };
+        await cacheSet(db, "ladder", payload);
+        return json(payload, { status: 200 }, origin, true);
+      } catch (err) {
+        if (cached) return json({ ...cached.data, stale: true, error: err.message }, { status: 200 }, origin, true);
+        return json({ error: err.message }, { status: 502 }, origin, true);
+      }
+    }
+
+    // ---------- GET /playhq/debug?key=... ----------
+    // Dumps resolved IDs + raw upstream PlayHQ JSON so a wrong field-name
+    // guess in normalizeGame/normalizeLadderRow can be fixed quickly.
+    // Gated behind the same ACCESS_KEY as /check-in -- not because this
+    // data is sensitive (it's public sport results), just so this worker
+    // can't be used as a free anonymous PlayHQ proxy by anyone who finds it.
+    if (path === "/playhq/debug" && request.method === "GET") {
+      const providedKey = request.headers.get("X-Access-Key") || new URL(request.url).searchParams.get("key") || "";
+      if (!env.ACCESS_KEY || !safeEqual(providedKey, env.ACCESS_KEY)) {
+        return json({ error: "Missing or incorrect access key (?key=... or X-Access-Key header)." }, { status: 401 }, origin, true);
+      }
+      const resolved = await resolveKatsGrade(env, db);
+      const [rawGames, rawLadder] = await Promise.all([
+        playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`),
+        playhqFetch(env, `/v2/grades/${resolved.gradeId}/ladder`),
+      ]);
+      return json({ resolved, rawGames, rawLadder }, { status: 200 }, origin, true);
+    }
+  } catch (err) {
+    return json({ error: err.message }, { status: 502 }, origin, true);
+  }
+
+  return json({ error: "Not found." }, { status: 404 }, origin, true);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const origin = request.headers.get("Origin") || "";
     const db = env.DB;
+    const isPlayhq = url.pathname.replace(/\/+$/, "").startsWith("/playhq/");
 
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders(origin) });
+      return new Response(null, { headers: corsHeaders(origin, isPlayhq) });
+    }
+
+    // ---------- public PlayHQ fixtures/ladder ----------
+    // Not gated by ACCESS_KEY: this backs the public fixtures page, not the
+    // private check-in tool. See handlePlayhq() above.
+    if (isPlayhq) {
+      return handlePlayhq(request, env, db, url.pathname.replace(/\/+$/, ""), origin);
     }
 
     // ---------- private-link gate ----------

@@ -141,6 +141,9 @@
             </p>
             <h3>Fixtures &amp; Results</h3>
             <p>Kats RFC play in BC Rugby's Men's Division 2. Live schedules, ladder standings and match results are managed by BC Rugby Union &mdash; not on this page.</p>
+            <!-- Filled in by assets/js/playhq.js from the Worker's public
+                 /playhq/fixtures endpoint; stays hidden if it can't load. -->
+            <p class="playhq-widget-status" id="playhq-next-fixture" hidden></p>
           </div>
           <div class="playhq-actions">
             <a class="btn btn-gold" href="https://www.bcrugby.com/fixtures---results0adb61e3" target="_blank" rel="noopener">
@@ -236,6 +239,7 @@
   </footer>
 
   <script src="assets/js/main.js"></script>
+  <script src="assets/js/playhq.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>
