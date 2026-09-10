@@ -285,13 +285,16 @@ async function resolveKatsGrade(env, db) {
 
 // GET /v2/grades/:id/games -- confirmed against a real response. Not a
 // flat list of games at all: it's { rounds: [{ name, games: [...] }],
-// teams: [{id,name}], playingSurfaces: [{id, venue:{name,...}}] }. Each
-// game references team/surface IDs into those lookup tables rather than
+// teams: [{id,name}], playingSurfaces: [{id, venue:{name,...}}] }, and
+// crucially it's every team's fixtures for the whole grade (e.g. 10 teams
+// round-robin), not just this org's -- so `teamId` (Kats' resolved team
+// id) filters it down to just the games Kats is actually in. Each game
+// references team/surface IDs into the lookup tables above rather than
 // embedding names directly, and each team entry on the game carries
 // isHomeTeam + an `outcome` (null pre-game -- its shape once a result
 // exists is still unverified, so score extraction below is a best-effort
 // guess; everything else in this function is confirmed).
-function normalizeGamesResponse(body) {
+function normalizeGamesResponse(body, teamId) {
   const teamNameById = {};
   for (const t of asArray(body && body.teams)) {
     teamNameById[pick(t, ["id", "Id"])] = pick(t, ["name", "Name"]);
@@ -312,6 +315,7 @@ function normalizeGamesResponse(body) {
       const away = teams.find((t) => pick(t, ["isHomeTeam", "IsHomeTeam"]) === false);
       const homeId = home && pick(home, ["id", "Id"]);
       const awayId = away && pick(away, ["id", "Id"]);
+      if (teamId && homeId !== teamId && awayId !== teamId) continue; // not one of Kats' games
       games.push({
         id: pick(g, ["id", "Id"]),
         round: roundName,
@@ -371,7 +375,7 @@ async function handlePlayhq(request, env, db, path, origin) {
       if (cached && cached.fresh) return json(cached.data, { status: 200 }, origin, true);
       try {
         const resolved = await resolveKatsGrade(env, db);
-        const games = normalizeGamesResponse(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`));
+        const games = normalizeGamesResponse(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`), resolved.teamId);
         const payload = { team: { id: resolved.teamId, name: resolved.teamName }, grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), games };
         await cacheSet(db, "fixtures", payload);
         return json(payload, { status: 200 }, origin, true);
