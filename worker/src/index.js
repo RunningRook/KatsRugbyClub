@@ -182,6 +182,25 @@ function pick(obj, keyPaths) {
   return undefined;
 }
 
+// PlayHQ paginates list endpoints via {data, metadata:{hasMore,nextCursor}}
+// (confirmed against a real response) -- the teams list in particular is
+// every team in the whole competition (hundreds), not just this org's, so
+// a single page isn't enough to find ours. Capped at 10 pages (~1000
+// items) as a sanity limit, not because that's expected to be hit.
+async function playhqFetchAllPages(env, basePath) {
+  let all = [];
+  let cursor = null;
+  for (let i = 0; i < 10; i++) {
+    const sep = basePath.includes("?") ? "&" : "?";
+    const body = await playhqFetch(env, cursor ? `${basePath}${sep}cursor=${encodeURIComponent(cursor)}` : basePath);
+    all = all.concat(asArray(body));
+    const meta = body && body.metadata;
+    if (!meta || !meta.hasMore || !meta.nextCursor) break;
+    cursor = meta.nextCursor;
+  }
+  return all;
+}
+
 async function cacheGet(db, key, ttlMs) {
   const row = await db.prepare("SELECT payload, fetched_at FROM playhq_cache WHERE cache_key = ?").bind(key).first();
   if (!row) return null;
@@ -224,16 +243,23 @@ async function resolveKatsGrade(env, db) {
   const seasonId = pick(season, ["id", "Id", "ID"]);
   if (!seasonId) throw new Error("Couldn't find an id on a PlayHQ season (see /playhq/debug).");
 
-  const teams = asArray(await playhqFetch(env, `/v1/seasons/${seasonId}/teams`));
-  const team = teams.find((t) => String(pick(t, ["name", "Name"]) || "").toLowerCase().includes(teamMatch));
+  // /v1/seasons/:id/teams returns every team in the whole BC Rugby
+  // competition, not just this org's -- match on team.club.id against our
+  // own verified org id first (exact, can't be fooled by another club's
+  // team happening to share initials -- e.g. Kelowna Crows field a team
+  // literally named "KRFC U12 Boys"). Fall back to a name-substring match
+  // only if club.id isn't populated the way we expect.
+  const teams = await playhqFetchAllPages(env, `/v1/seasons/${seasonId}/teams`);
+  const team =
+    teams.find((t) => String(pick(t, ["club.id", "Club.Id"]) || "").toLowerCase() === orgId.toLowerCase()) ||
+    teams.find((t) => String(pick(t, ["name", "Name"]) || "").toLowerCase().includes(teamMatch));
   if (!team) {
     // Include what PlayHQ actually returned so this is fixable from the
-    // error alone -- an empty list here means the "name"/"Name" field
-    // guess itself is wrong, not just that there's no Kats team.
-    const seenNames = teams.map((t) => pick(t, ["name", "Name"])).filter(Boolean);
+    // error alone.
+    const clubNames = [...new Set(teams.map((t) => pick(t, ["club.name", "Club.Name"])).filter(Boolean))];
     throw new Error(
-      `No PlayHQ team matching "${teamMatch}" in season ${seasonId}. ` +
-        (seenNames.length ? `Team names seen: ${seenNames.join(", ")}` : `Got ${teams.length} team(s) but couldn't read a name field from any of them`) +
+      `No PlayHQ team for org ${orgId} or matching "${teamMatch}" among ${teams.length} team(s) in season ${seasonId}. ` +
+        (clubNames.length ? `Clubs seen: ${clubNames.slice(0, 30).join(", ")}${clubNames.length > 30 ? ", ..." : ""}` : "Couldn't read a club name from any of them") +
         " (see /playhq/debug)."
     );
   }
@@ -293,7 +319,7 @@ async function handlePlayhq(request, env, db, path, origin) {
       if (cached && cached.fresh) return json(cached.data, { status: 200 }, origin, true);
       try {
         const resolved = await resolveKatsGrade(env, db);
-        const games = asArray(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`)).map(normalizeGame);
+        const games = (await playhqFetchAllPages(env, `/v2/grades/${resolved.gradeId}/games`)).map(normalizeGame);
         const payload = { team: { id: resolved.teamId, name: resolved.teamName }, grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), games };
         await cacheSet(db, "fixtures", payload);
         return json(payload, { status: 200 }, origin, true);
@@ -309,7 +335,7 @@ async function handlePlayhq(request, env, db, path, origin) {
       if (cached && cached.fresh) return json(cached.data, { status: 200 }, origin, true);
       try {
         const resolved = await resolveKatsGrade(env, db);
-        const ladder = asArray(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/ladder`)).map(normalizeLadderRow);
+        const ladder = (await playhqFetchAllPages(env, `/v2/grades/${resolved.gradeId}/ladder`)).map(normalizeLadderRow);
         const payload = { grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), ladder };
         await cacheSet(db, "ladder", payload);
         return json(payload, { status: 200 }, origin, true);
@@ -331,9 +357,13 @@ async function handlePlayhq(request, env, db, path, origin) {
         return json({ error: "Missing or incorrect access key (?key=... or X-Access-Key header)." }, { status: 401 }, origin, true);
       }
 
-      // Gathers raw upstream JSON independently of resolveKatsGrade, so
-      // this stays useful even when resolution itself fails (e.g. no team
-      // name matched) -- that's the exact case it needs to diagnose.
+      // Gathers upstream JSON independently of resolveKatsGrade, so this
+      // stays useful even when resolution itself fails (e.g. no team
+      // matched) -- that's the exact case it needs to diagnose. The teams
+      // list is every team in the whole BC Rugby competition (hundreds,
+      // paginated), so this reports a summary + the matched team rather
+      // than dumping the whole thing -- see rawUnmatchedClubsSample below
+      // if you need to see what IS there.
       const debugInfo = { orgId: env.PLAYHQ_ORG_ID, teamMatch: env.PLAYHQ_TEAM_MATCH || "kats" };
       try {
         const rawSeasons = await playhqFetch(env, `/v1/organisations/${env.PLAYHQ_ORG_ID}/seasons`);
@@ -343,11 +373,16 @@ async function handlePlayhq(request, env, db, path, origin) {
         const seasonId = season && pick(season, ["id", "Id", "ID"]);
         debugInfo.chosenSeasonId = seasonId || null;
         if (seasonId) {
-          const [rawTeams, rawGrades] = await Promise.all([
-            playhqFetch(env, `/v1/seasons/${seasonId}/teams`),
+          const [teams, rawGrades] = await Promise.all([
+            playhqFetchAllPages(env, `/v1/seasons/${seasonId}/teams`),
             playhqFetch(env, `/v1/seasons/${seasonId}/grades`),
           ]);
-          debugInfo.rawTeams = rawTeams;
+          debugInfo.teamsFetchedTotal = teams.length;
+          debugInfo.matchedTeam =
+            teams.find((t) => String(pick(t, ["club.id", "Club.Id"]) || "").toLowerCase() === String(env.PLAYHQ_ORG_ID).toLowerCase()) || null;
+          if (!debugInfo.matchedTeam) {
+            debugInfo.rawUnmatchedClubsSample = [...new Set(teams.map((t) => pick(t, ["club.name", "Club.Name"])).filter(Boolean))].slice(0, 50);
+          }
           debugInfo.rawGrades = rawGrades;
         }
       } catch (err) {
