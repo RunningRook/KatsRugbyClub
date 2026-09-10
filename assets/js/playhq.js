@@ -6,13 +6,15 @@
  * fixtures & ladder"), not PlayHQ directly: the Worker holds the PlayHQ API
  * key server-side and caches responses, so this page never sees the key.
  *
- * This is progressive enhancement on top of the .playhq-card link-out
- * that's already on the page. If the fetch fails for any reason — the
- * Worker's PLAYHQ_API_KEY secret isn't set yet, PlayHQ is down, or a
- * field-name guess in the Worker's normalizeGame/normalizeLadderRow came
- * back empty (see worker/src/index.js's caveat comment) — the widget
- * containers are just left hidden. Nothing on the page breaks; the
- * existing link-out card is still there and still works either way.
+ * Progressive enhancement: if the fetch fails for any reason — the
+ * Worker's PLAYHQ_API_KEY secret isn't set, PlayHQ is down, or a
+ * field-name guess in the Worker's normalizeGamesResponse/
+ * normalizeLadderResponse turns out wrong (see worker/src/index.js) —
+ * the widget containers are just left hidden rather than showing broken
+ * data. A page can optionally include a `#playhq-fallback` element
+ * (visible by default, e.g. "Loading live fixtures…") that gets hidden
+ * automatically the moment real data loads, so a failure doesn't leave
+ * the page looking empty forever.
  */
 (function () {
   "use strict";
@@ -37,6 +39,13 @@
     return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   }
 
+  function fmtTime(value) {
+    if (!value) return "";
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+
   function isKats(name) {
     return /kats/i.test(String(name || ""));
   }
@@ -45,15 +54,14 @@
     var opponent = isKats(g.homeTeam) ? g.awayTeam : g.homeTeam;
     var prefix = isKats(g.homeTeam) ? "vs" : "@";
     var hasScore = g.homeScore != null && g.awayScore != null;
-    var scoreHtml = hasScore
-      ? escapeHtml(g.homeScore) + " – " + escapeHtml(g.awayScore)
-      : '<span class="tbd">' + fmtDate(g.date) + "</span>";
+    var scoreHtml = hasScore ? escapeHtml(g.homeScore) + " – " + escapeHtml(g.awayScore) : "";
+    var time = fmtTime(g.date);
     return (
       '<div class="fixture">' +
-      '<div class="fixture-round">' + (g.round ? escapeHtml(g.round) : fmtDate(g.date)) + "</div>" +
+      '<div class="fixture-round">' + fmtDate(g.date) + "</div>" +
       '<div class="fixture-opponent"><div>' +
       '<div class="name">' + prefix + " " + escapeHtml(opponent || "TBC") + "</div>" +
-      '<div class="meta">' + fmtDate(g.date) + (g.venue ? " &middot; " + escapeHtml(g.venue) : "") + "</div>" +
+      '<div class="meta">' + (time ? escapeHtml(time) : "Time TBC") + (g.venue ? " &middot; " + escapeHtml(g.venue) : "") + "</div>" +
       "</div></div>" +
       '<div class="fixture-score">' + scoreHtml + "</div>" +
       "</div>"
@@ -79,6 +87,10 @@
   function showWidget(container) {
     var widget = container.closest ? container.closest(".playhq-widget") : null;
     if (widget) widget.hidden = false;
+    // Once any real data has loaded, the "still loading / couldn't load"
+    // fallback message (if the page has one) is no longer needed.
+    var fallback = $("#playhq-fallback");
+    if (fallback) fallback.hidden = true;
   }
 
   function stampUpdated(data) {
@@ -97,7 +109,8 @@
     if (!next) return;
     var opponent = isKats(next.homeTeam) ? next.awayTeam : next.homeTeam;
     var prefix = isKats(next.homeTeam) ? "vs" : "@";
-    el.textContent = "Next up: " + prefix + " " + (opponent || "TBC") + " — " + fmtDate(next.date);
+    var time = fmtTime(next.date);
+    el.textContent = "Next up: " + prefix + " " + (opponent || "TBC") + " — " + fmtDate(next.date) + (time ? ", " + time : "");
     el.hidden = false;
   }
 
