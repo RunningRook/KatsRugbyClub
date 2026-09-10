@@ -150,14 +150,18 @@ club obtained a PlayHQ API key, tenant (`rca`) and organisation ID, so `2023-24-
 (fixtures + ladder) and `index.html` ("Next up" teaser) now also pull live data via
 `assets/js/playhq.js`, which talks to the Cloudflare Worker's `/playhq/fixtures` and
 `/playhq/ladder` endpoints (the same Worker that backs `/check-in/`). It correctly resolves to
-the real team ("Kats Men's Division 2", grade "Senior Men Division 2") against PlayHQ's live API
-— see `worker/README.md`'s "PlayHQ live fixtures & ladder" section for the full story, including
-one real bug that surfaced and got fixed post-deploy (team name matching was unreliable across
-PlayHQ's full multi-club team list; fixed by matching on club ID instead). As of this writing the
-widget shows nothing yet because the 2026/27 season's first game hasn't been played — confirmed
-correct, not broken, and it needs no further action to start populating once results come in.
-**The PlayHQ API key itself is a Worker secret, never committed to this repo** — same pattern as
-the check-in tool's `ACCESS_KEY`.
+the real team ("Kats Men's Division 2", grade "Senior Men Division 2") and now shows the full
+19-round 2026/27 fixture list and a live 10-team ladder — see `worker/README.md`'s "PlayHQ live
+fixtures & ladder" section for the full story, including two real bugs that surfaced and were
+fixed post-deploy: team name matching was unreliable across PlayHQ's full multi-club team list
+(fixed by matching on club ID instead), and the games/ladder endpoints turned out to use
+relational/column-index shapes nothing like a flat list of rows, which silently produced empty
+results even though PlayHQ had a full schedule loaded (fixed by rewriting the parsers against the
+real response shapes). Scores aren't shown yet only because no game has been played — the field
+that will hold them once one is couldn't be confirmed and is the one thing still worth
+double-checking after the first result comes in (see worker/README.md). **The PlayHQ API key
+itself is a Worker secret, never committed to this repo** — same pattern as the check-in tool's
+`ACCESS_KEY`.
 
 ### How this was verified (so it doesn't get pasted-in blind next season)
 

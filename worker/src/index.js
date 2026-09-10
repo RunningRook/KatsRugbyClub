@@ -283,33 +283,85 @@ async function resolveKatsGrade(env, db) {
   return resolved;
 }
 
-function normalizeGame(g) {
-  return {
-    id: pick(g, ["id", "Id", "ID"]),
-    round: pick(g, ["round.name", "Round.Name", "round", "Round"]),
-    date: pick(g, ["date", "Date", "startTime", "StartTime", "scheduledAt", "ScheduledAt"]),
-    status: pick(g, ["status", "Status"]),
-    venue: pick(g, ["venue.name", "Venue.Name", "venue", "Venue", "ground.name"]),
-    homeTeam: pick(g, ["homeTeam.name", "HomeTeam.Name", "homeTeamName", "HomeTeamName"]),
-    awayTeam: pick(g, ["awayTeam.name", "AwayTeam.Name", "awayTeamName", "AwayTeamName"]),
-    homeScore: pick(g, ["homeScore", "HomeScore", "results.home.score", "home.score"]),
-    awayScore: pick(g, ["awayScore", "AwayScore", "results.away.score", "away.score"]),
-  };
+// GET /v2/grades/:id/games -- confirmed against a real response. Not a
+// flat list of games at all: it's { rounds: [{ name, games: [...] }],
+// teams: [{id,name}], playingSurfaces: [{id, venue:{name,...}}] }. Each
+// game references team/surface IDs into those lookup tables rather than
+// embedding names directly, and each team entry on the game carries
+// isHomeTeam + an `outcome` (null pre-game -- its shape once a result
+// exists is still unverified, so score extraction below is a best-effort
+// guess; everything else in this function is confirmed).
+function normalizeGamesResponse(body) {
+  const teamNameById = {};
+  for (const t of asArray(body && body.teams)) {
+    teamNameById[pick(t, ["id", "Id"])] = pick(t, ["name", "Name"]);
+  }
+  const venueBySurfaceId = {};
+  for (const s of asArray(body && body.playingSurfaces)) {
+    venueBySurfaceId[pick(s, ["id", "Id"])] = pick(s, ["venue.name", "Venue.Name"]);
+  }
+
+  const games = [];
+  for (const round of asArray(body && body.rounds)) {
+    const roundName = pick(round, ["name", "Name"]);
+    for (const g of asArray(round.games)) {
+      const schedule = asArray(g.schedule)[0] || {};
+      const surfaceId = pick(schedule, ["playingSurfaceId", "PlayingSurfaceId"]);
+      const teams = asArray(g.teams);
+      const home = teams.find((t) => pick(t, ["isHomeTeam", "IsHomeTeam"]) === true);
+      const away = teams.find((t) => pick(t, ["isHomeTeam", "IsHomeTeam"]) === false);
+      const homeId = home && pick(home, ["id", "Id"]);
+      const awayId = away && pick(away, ["id", "Id"]);
+      games.push({
+        id: pick(g, ["id", "Id"]),
+        round: roundName,
+        date: pick(schedule, ["dateTime", "DateTime"]),
+        status: pick(g, ["status", "Status"]),
+        venue: venueBySurfaceId[surfaceId],
+        homeTeam: teamNameById[homeId] || homeId,
+        awayTeam: teamNameById[awayId] || awayId,
+        // Unverified -- no completed game seen yet to confirm outcome's shape.
+        homeScore: home && pick(home, ["outcome.score", "Outcome.Score", "outcome.points"]),
+        awayScore: away && pick(away, ["outcome.score", "Outcome.Score", "outcome.points"]),
+      });
+    }
+  }
+  return games;
 }
 
-function normalizeLadderRow(r) {
-  return {
-    position: pick(r, ["position", "Position", "rank", "Rank"]),
-    team: pick(r, ["team.name", "Team.Name", "teamName", "TeamName", "name", "Name"]),
-    played: pick(r, ["played", "Played", "statistics.played"]),
-    won: pick(r, ["won", "Won", "wins", "statistics.won"]),
-    lost: pick(r, ["lost", "Lost", "losses", "statistics.lost"]),
-    drawn: pick(r, ["drawn", "Drawn", "draws", "statistics.drawn"]),
-    byes: pick(r, ["byes", "Byes", "statistics.byes"]),
-    points: pick(r, ["points", "Points", "competitionPoints", "statistics.points"]),
-    pointsFor: pick(r, ["pointsFor", "PointsFor", "for", "statistics.for"]),
-    pointsAgainst: pick(r, ["pointsAgainst", "PointsAgainst", "against", "statistics.against"]),
-  };
+// GET /v2/grades/:id/ladder -- confirmed against a real response. A
+// column-index scheme, not keyed rows: { ladders: [{ headers: [{key,...}],
+// standings: [{ team:{id,name}, values: [...] }] }] }. `values[i]`
+// corresponds to `headers[i].key`, so headers are used to build a lookup
+// rather than assuming a fixed column order. Ranking order in the
+// `standings` array itself is assumed to already be ladder order (index+1
+// = position) -- PlayHQ doesn't send an explicit rank field, and this
+// couldn't be confirmed against a competition with actual results yet.
+function normalizeLadderResponse(body) {
+  const table = asArray(body && body.ladders)[0];
+  if (!table) return [];
+  const headerKeys = asArray(table.headers).map((h) => pick(h, ["key", "Key"]));
+  const colIndex = {};
+  headerKeys.forEach((key, i) => {
+    colIndex[key] = i;
+  });
+  const valueFor = (values, key) => (colIndex[key] !== undefined ? values[colIndex[key]] : undefined);
+
+  return asArray(table.standings).map((row, i) => {
+    const values = asArray(row.values);
+    return {
+      position: i + 1,
+      team: pick(row, ["team.name", "Team.Name"]),
+      played: valueFor(values, "played"),
+      won: valueFor(values, "won"),
+      lost: valueFor(values, "lost"),
+      drawn: valueFor(values, "drawn"),
+      byes: valueFor(values, "byes"),
+      points: valueFor(values, "competitionPoints"),
+      pointsFor: valueFor(values, "pointsFor"),
+      pointsAgainst: valueFor(values, "pointsAgainst"),
+    };
+  });
 }
 
 async function handlePlayhq(request, env, db, path, origin) {
@@ -319,7 +371,7 @@ async function handlePlayhq(request, env, db, path, origin) {
       if (cached && cached.fresh) return json(cached.data, { status: 200 }, origin, true);
       try {
         const resolved = await resolveKatsGrade(env, db);
-        const games = (await playhqFetchAllPages(env, `/v2/grades/${resolved.gradeId}/games`)).map(normalizeGame);
+        const games = normalizeGamesResponse(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`));
         const payload = { team: { id: resolved.teamId, name: resolved.teamName }, grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), games };
         await cacheSet(db, "fixtures", payload);
         return json(payload, { status: 200 }, origin, true);
@@ -335,7 +387,7 @@ async function handlePlayhq(request, env, db, path, origin) {
       if (cached && cached.fresh) return json(cached.data, { status: 200 }, origin, true);
       try {
         const resolved = await resolveKatsGrade(env, db);
-        const ladder = (await playhqFetchAllPages(env, `/v2/grades/${resolved.gradeId}/ladder`)).map(normalizeLadderRow);
+        const ladder = normalizeLadderResponse(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/ladder`));
         const payload = { grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), ladder };
         await cacheSet(db, "ladder", payload);
         return json(payload, { status: 200 }, origin, true);

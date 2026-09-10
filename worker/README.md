@@ -169,17 +169,31 @@ walked through the verification steps below. What that turned up:
   paginating through all pages and matching each team's `club.id` against
   the org's own verified ID instead — see `playhqFetchAllPages()` and
   `resolveKatsGrade()` in `src/index.js`.
-- `/playhq/fixtures` and `/playhq/ladder` both return correctly-shaped
-  empty results (`"games":[]` / `"ladder":[]`) — confirmed genuinely
-  correct, not a bug: the 2026/27 season's first game is this Saturday, so
-  PlayHQ has nothing loaded yet. **The `normalizeGame()`/`normalizeLadderRow()`
-  field-name mapping is therefore still unverified against a real game/ladder
-  row** (only against an empty array) — if the widget stays empty even
-  after games are played, that mapping is the first thing to check via
-  `/playhq/debug` (below).
-- No redeploy needed once PlayHQ has real data — the endpoints poll PlayHQ
-  live (cached ~10 minutes) and the widget will start populating on its own
-  the moment results start coming in.
+- `/playhq/fixtures` and `/playhq/ladder` first came back empty
+  (`"games":[]` / `"ladder":[]`) even though the 2026/27 season's full
+  19-round schedule and a 10-team ladder both genuinely exist in PlayHQ —
+  that was a **real parsing bug**, caught by checking `/playhq/debug`'s
+  raw output rather than assuming "empty means nothing's loaded yet."
+  Both endpoints turn out to use shapes nothing like a flat list of rows:
+  - **Games**: `{ rounds: [{ name, games: [...] }], teams: [{id,name}],
+    playingSurfaces: [{id, venue:{name,...}}] }` — each game references
+    team/venue IDs into those lookup tables rather than embedding names.
+  - **Ladder**: `{ ladders: [{ headers: [{key,...}], standings: [{
+    team:{id,name}, values:[...] }] }] }` — a column-index scheme, not
+    keyed rows (`values[i]` corresponds to `headers[i].key`).
+
+  `normalizeGamesResponse()` and `normalizeLadderResponse()` in
+  `src/index.js` were rewritten against these real shapes and now
+  correctly return the full fixture list and ladder standings (confirmed:
+  18 opponent rounds + finals, real dates/venues, all 10 teams at 0-0-0
+  pre-season). **The one still-unverified piece**: no game has been played
+  yet, so the `outcome`/score field shape once a result exists is a
+  best-effort guess (see the comment on `normalizeGamesResponse()`) — if
+  fixtures show but scores don't appear after a game is played, that's
+  the first thing to check via `/playhq/debug`.
+- No redeploy needed for new fixtures/results as the season progresses —
+  the endpoints poll PlayHQ live (cached ~10 minutes) and the widget
+  updates on its own.
 
 **Setup (once):**
 
@@ -209,23 +223,25 @@ curl "https://kats-checkin-api.katsrfc.workers.dev/playhq/fixtures"
 curl "https://kats-checkin-api.katsrfc.workers.dev/playhq/ladder"
 ```
 
-- Games/ladder rows with real teams, dates and scores → it worked, nothing
-  more to do.
-- `"team":{"name":"Kats Men's Division 2", ...}` with `"games":[]` (or
-  `"ladder":[]`) → this is the confirmed-correct state before/just after a
-  round has actually been played (see "Status" above) — not a bug, no
-  action needed, it'll populate on its own.
-- `{"error": "..."}` → open
+- A full round-by-round fixture list and a 10-team ladder → it worked,
+  nothing more to do (this is the confirmed state as of "Status" above,
+  pre-season: real dates/venues/opponents, no scores yet since no game has
+  been played).
+- `"games":[]` or `"ladder":[]` when you know PlayHQ has a schedule loaded
+  → **don't assume this is fine because the season hasn't started** (that
+  assumption was wrong once already here) — treat it as a parsing bug and
+  check `/playhq/debug` immediately.
+- `{"error": "..."}`, or the above empty-when-it-shouldn't-be case → open
   `https://kats-checkin-api.katsrfc.workers.dev/playhq/debug?key=YOUR_ACCESS_KEY`
   (reuses the check-in `ACCESS_KEY`, just to keep this worker from being
   usable as a free anonymous PlayHQ proxy). It reports the resolved
   season/team/grade, a team-count + club-list summary if team resolution
   itself failed, and raw upstream JSON for the games/ladder calls. Compare
-  that raw JSON's actual field names against `normalizeGame()` /
-  `normalizeLadderRow()` / `resolveKatsGrade()` in `src/index.js`, fix
-  whichever `pick(...)` lines guessed wrong, and `wrangler deploy` again.
-  If it's an authorization error instead, double check the API key and
-  `x-phq-tenant` value (`rca`) are exactly what the club was given.
+  that raw JSON's actual shape against `normalizeGamesResponse()` /
+  `normalizeLadderResponse()` / `resolveKatsGrade()` in `src/index.js`, fix
+  whichever part guessed wrong, and `wrangler deploy` again. If it's an
+  authorization error instead, double check the API key and `x-phq-tenant`
+  value (`rca`) are exactly what the club was given.
 
 If you'd rather not deal with any of this, the site works fine without
 it — the widget just never appears and the existing "View on BC Rugby"
