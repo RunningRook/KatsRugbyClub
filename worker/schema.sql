@@ -39,3 +39,12 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_availability_game ON availability(game_id);
+
+-- Cache for the public PlayHQ fixtures/ladder proxy (see "PlayHQ live
+-- fixtures & ladder" in worker/README.md). Not access-key gated -- it
+-- backs the public fixtures page, not the private check-in tool.
+CREATE TABLE IF NOT EXISTS playhq_cache (
+  cache_key  TEXT PRIMARY KEY,
+  payload    TEXT NOT NULL,    -- JSON-encoded
+  fetched_at INTEGER NOT NULL  -- unix ms
+);

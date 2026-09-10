@@ -1,0 +1,5 @@
+# Netlify redirects file (ignored by GitHub Pages and other static hosts,
+# which fall back to the 2023-24-season.html shim page below instead).
+# 301 = permanent redirect, so search engines transfer the old URL's
+# ranking to the new one instead of indexing both.
+/2023-24-season.html   /fixtures-results.html   301
