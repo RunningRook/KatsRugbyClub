@@ -16,7 +16,9 @@ dollars a year on any static host.
 ├── join-our-team.html       Join Our Team
 ├── diversity-and-inclusion.html  Diversity & Inclusion
 ├── contact.html              Contact (full form + map)
-├── 2023-24-season.html      Fixtures & Results (BC Rugby link-out + live PlayHQ widget; filename kept from the live site's URL)
+├── fixtures-results.html    Fixtures & Results (live PlayHQ widget)
+├── 2023-24-season.html      Redirects to fixtures-results.html (old URL kept working — see "Renaming a page")
+├── _redirects               Netlify-only 301 redirect for the above
 ├── robots.txt               Allows all crawlers, points at sitemap.xml
 ├── sitemap.xml              Lists all 7 pages for search engines
 ├── assets/
@@ -132,36 +134,20 @@ https://www.playhq.com/ca/rugby-canada/org/kats-rfc/0ab94db6/register
 
 The registration URL is used as the "Register on PlayHQ" button on `join-our-team.html`.
 
-**Fixtures & results link to BC Rugby, not directly to PlayHQ.** At the club's request, the
-"View on BC Rugby" / "Fixtures, Ladder & Results" buttons on `index.html` and
-`2023-24-season.html` point to BC Rugby Union's own fixtures/results page instead of the PlayHQ
-org page above:
+**Fixtures, results and the ladder are shown live on this site**, not linked out to PlayHQ or BC
+Rugby. `fixtures-results.html` (full fixtures list + ladder table) and `index.html` (a "Next up"
+teaser) pull live data via `assets/js/playhq.js`, which talks to the Cloudflare Worker's
+`/playhq/fixtures` and `/playhq/ladder` endpoints (the same Worker that backs `/check-in/`) — see
+`worker/README.md`'s "PlayHQ live fixtures & ladder" section for the full setup story, including
+two real bugs caught and fixed post-deploy (team matching, and the games/ladder response shapes).
+**The PlayHQ API key itself is a Worker secret, never committed to this repo** — same pattern as
+the check-in tool's `ACCESS_KEY`.
 
-```
-https://www.bcrugby.com/fixtures---results0adb61e3
-```
-
-BC Rugby's page is itself powered by PlayHQ's data underneath, but the club wanted the visible
-link to be BC Rugby's own branded page rather than PlayHQ directly, so this link-out card stays
-either way.
-
-**A live fixtures/ladder widget now sits alongside it, deployed and confirmed working.** The
-club obtained a PlayHQ API key, tenant (`rca`) and organisation ID, so `2023-24-season.html`
-(fixtures + ladder) and `index.html` ("Next up" teaser) now also pull live data via
-`assets/js/playhq.js`, which talks to the Cloudflare Worker's `/playhq/fixtures` and
-`/playhq/ladder` endpoints (the same Worker that backs `/check-in/`). It correctly resolves to
-the real team ("Kats Men's Division 2", grade "Senior Men Division 2") and now shows the full
-19-round 2026/27 fixture list and a live 10-team ladder — see `worker/README.md`'s "PlayHQ live
-fixtures & ladder" section for the full story, including two real bugs that surfaced and were
-fixed post-deploy: team name matching was unreliable across PlayHQ's full multi-club team list
-(fixed by matching on club ID instead), and the games/ladder endpoints turned out to use
-relational/column-index shapes nothing like a flat list of rows, which silently produced empty
-results even though PlayHQ had a full schedule loaded (fixed by rewriting the parsers against the
-real response shapes). Scores aren't shown yet only because no game has been played — the field
-that will hold them once one is couldn't be confirmed and is the one thing still worth
-double-checking after the first result comes in (see worker/README.md). **The PlayHQ API key
-itself is a Worker secret, never committed to this repo** — same pattern as the check-in tool's
-`ACCESS_KEY`.
+An earlier version of this page linked out to BC Rugby's own fixtures/results page
+(`https://www.bcrugby.com/fixtures---results0adb61e3`) instead, back when a live embed wasn't
+possible — that link-out card has been removed now that the widget above replaces it. If PlayHQ
+or the Worker is ever down for an extended period, that BC Rugby URL is still a valid fallback to
+link back to manually.
 
 ### How this was verified (so it doesn't get pasted-in blind next season)
 
@@ -213,9 +199,10 @@ season even though the organisation page itself is correct and permanent.
   with headers `Content-Type: application/json`, `Origin: https://www.playhq.com`, and a normal
   browser `User-Agent` (PlayHQ's CDN blocks requests without those). Match on the `websiteUrl`
   field to make sure you've got the club's real record before trusting any ID it returns.
-- `2023-24-season.html` no longer keeps a hand-maintained fixture list — it's just the link-out
-  card. If BC Rugby ever discontinues PlayHQ, the original `.fixtures-list`/`.fixture` markup and
-  CSS are still in `style.css` (unused now) and can be reused to add a fixtures table back.
+- `fixtures-results.html` doesn't keep a hand-maintained fixture list — it's populated live from
+  PlayHQ via `assets/js/playhq.js` (see the PlayHQ section above). The `.fixtures-list`/`.fixture`
+  CSS in `style.css` is what that live widget renders into; it's the same markup pattern this page
+  used for a hand-maintained list before PlayHQ existed, reused rather than rebuilt.
 
 ## Diversity &amp; Inclusion (Safe Sport / Code of Conduct links)
 
@@ -349,7 +336,7 @@ contact form; Formspree's dashboard shows usage and lets you upgrade if that's e
 **If the club ever needs to change where submissions go** (a different account, or the free tier
 is exceeded): create a new form at [formspree.io](https://formspree.io), then replace
 `moeqnbpq` with the new ID across `index.html`, `about-us.html`, `history.html`,
-`join-our-team.html`, `contact.html`, `diversity-and-inclusion.html`, and `2023-24-season.html`
+`join-our-team.html`, `contact.html`, `diversity-and-inclusion.html`, and `fixtures-results.html`
 (8 `<form action>` occurrences total — `contact.html` has two forms). Any other static-friendly
 form backend (Netlify Forms, Basin, Getform, a Google Form, a serverless function you write
 yourself) works the same way — just change the `action` URL everywhere it appears.
@@ -387,6 +374,20 @@ Any static host works. Three easy options:
 
 In all three cases, no server-side config is needed — it's static HTML/CSS/JS/images only.
 
+### Renaming a page
+
+If a page's filename/URL ever changes (like `2023-24-season.html` → `fixtures-results.html`),
+update every internal link (`grep -rl "old-name.html" .` finds them all — nav + footer on every
+page, `sitemap.xml`, and the renamed page's own `canonical`/`og:url`/`twitter` tags), then leave a
+redirect at the old URL so existing bookmarks/search results/shared links don't just 404:
+
+- **`_redirects`** (repo root) — a real 301 redirect, but only Netlify reads this file.
+- **A shim page at the old filename** — for GitHub Pages or any other static host that doesn't
+  support server-side redirects: a minimal HTML file at the old URL with
+  `<meta http-equiv="refresh" content="0; url=new-name.html">`, a `<link rel="canonical">` pointing
+  at the new URL, `<meta name="robots" content="noindex">`, and a `location.replace(...)` script
+  as a JS fallback. See `2023-24-season.html` for a working example of this pattern.
+
 ## What was and wasn't captured
 
 **Captured:** full navigation (Home, About Us, History, Join Our Team, Diversity & Inclusion,
@@ -414,12 +415,12 @@ request — that page now only links out to BC Rugby's live fixtures/results.
   colours/fonts couldn't be scraped directly. This rebuild's palette was instead sampled from the
   club's own logo file and its typography chosen to match the spirit of the original (geometric
   sans headings + humanist sans body) — visually close, but not a pixel-perfect clone.
-- **Season page URL** — kept as `2023-24-season.html` to match the live site's actual URL (the
-  club appears to reuse last year's URL/page for each new season rather than creating a new one
-  each year). Its content and nav label were changed from "2024/25 Fixtures & Results" to a
-  season-agnostic "Fixtures & Results" (see the PlayHQ section above) specifically so it
-  **doesn't** need renaming every season anymore — BC Rugby's site is now the source of truth for
-  the current season, and this page carries no fixture list of its own to keep updated.
+- **Season page URL** — originally kept as `2023-24-season.html` to match the live Wix site's
+  actual URL, back when this page just linked out to BC Rugby's site. Once it started showing a
+  live PlayHQ widget directly (see the PlayHQ section above), keeping a URL that names a specific
+  past season stopped making sense, so it's now **`fixtures-results.html`**. The old URL still
+  works — it's a redirect page (see "Renaming a page" below) — so existing bookmarks/search
+  results/shared links aren't broken.
 
 ## Manual steps for the club after migrating
 

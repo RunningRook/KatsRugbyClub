@@ -145,7 +145,7 @@ it just by reading the page's source.
 
 This same Worker also serves `/playhq/fixtures` and `/playhq/ladder` —
 **public**, un-gated endpoints (no `ACCESS_KEY` needed) that back the live
-widget on `2023-24-season.html` and the "Next up" line on `index.html` (see
+widget on `fixtures-results.html` and the "Next up" line on `index.html` (see
 `assets/js/playhq.js`). They're a thin proxy + cache in front of PlayHQ's
 own External API, so the club's PlayHQ API key stays a server-side secret
 and PlayHQ isn't hit on every single page load — see the big comment above
