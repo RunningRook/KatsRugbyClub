@@ -198,6 +198,16 @@ async function cacheSet(db, key, data) {
     .run();
 }
 
+// Picks the season resolveKatsGrade (and /playhq/debug, so they agree)
+// should use: whichever PlayHQ marks active/current, else the most
+// recently started one.
+function pickActiveSeason(seasons) {
+  return (
+    seasons.find((s) => /active|current/i.test(String(pick(s, ["status", "Status"]) || ""))) ||
+    seasons.slice().sort((a, b) => new Date(pick(b, ["startDate", "StartDate"]) || 0) - new Date(pick(a, ["startDate", "StartDate"]) || 0))[0]
+  );
+}
+
 // Org -> current season -> Kats team -> grade. Cached for a day since none
 // of this changes mid-week; a season rollover just means the next refresh
 // after the cache expires picks up the new one.
@@ -210,15 +220,23 @@ async function resolveKatsGrade(env, db) {
 
   const seasons = asArray(await playhqFetch(env, `/v1/organisations/${orgId}/seasons`));
   if (!seasons.length) throw new Error("PlayHQ returned no seasons for this organisation (see /playhq/debug).");
-  const season =
-    seasons.find((s) => /active|current/i.test(String(pick(s, ["status", "Status"]) || ""))) ||
-    seasons.slice().sort((a, b) => new Date(pick(b, ["startDate", "StartDate"]) || 0) - new Date(pick(a, ["startDate", "StartDate"]) || 0))[0];
+  const season = pickActiveSeason(seasons);
   const seasonId = pick(season, ["id", "Id", "ID"]);
   if (!seasonId) throw new Error("Couldn't find an id on a PlayHQ season (see /playhq/debug).");
 
   const teams = asArray(await playhqFetch(env, `/v1/seasons/${seasonId}/teams`));
   const team = teams.find((t) => String(pick(t, ["name", "Name"]) || "").toLowerCase().includes(teamMatch));
-  if (!team) throw new Error(`No PlayHQ team matching "${teamMatch}" in season ${seasonId} (see /playhq/debug).`);
+  if (!team) {
+    // Include what PlayHQ actually returned so this is fixable from the
+    // error alone -- an empty list here means the "name"/"Name" field
+    // guess itself is wrong, not just that there's no Kats team.
+    const seenNames = teams.map((t) => pick(t, ["name", "Name"])).filter(Boolean);
+    throw new Error(
+      `No PlayHQ team matching "${teamMatch}" in season ${seasonId}. ` +
+        (seenNames.length ? `Team names seen: ${seenNames.join(", ")}` : `Got ${teams.length} team(s) but couldn't read a name field from any of them`) +
+        " (see /playhq/debug)."
+    );
+  }
   const teamId = pick(team, ["id", "Id", "ID"]);
   const teamName = pick(team, ["name", "Name"]);
 
@@ -312,12 +330,44 @@ async function handlePlayhq(request, env, db, path, origin) {
       if (!env.ACCESS_KEY || !safeEqual(providedKey, env.ACCESS_KEY)) {
         return json({ error: "Missing or incorrect access key (?key=... or X-Access-Key header)." }, { status: 401 }, origin, true);
       }
-      const resolved = await resolveKatsGrade(env, db);
-      const [rawGames, rawLadder] = await Promise.all([
-        playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`),
-        playhqFetch(env, `/v2/grades/${resolved.gradeId}/ladder`),
-      ]);
-      return json({ resolved, rawGames, rawLadder }, { status: 200 }, origin, true);
+
+      // Gathers raw upstream JSON independently of resolveKatsGrade, so
+      // this stays useful even when resolution itself fails (e.g. no team
+      // name matched) -- that's the exact case it needs to diagnose.
+      const debugInfo = { orgId: env.PLAYHQ_ORG_ID, teamMatch: env.PLAYHQ_TEAM_MATCH || "kats" };
+      try {
+        const rawSeasons = await playhqFetch(env, `/v1/organisations/${env.PLAYHQ_ORG_ID}/seasons`);
+        debugInfo.rawSeasons = rawSeasons;
+        const seasons = asArray(rawSeasons);
+        const season = seasons.length ? pickActiveSeason(seasons) : null;
+        const seasonId = season && pick(season, ["id", "Id", "ID"]);
+        debugInfo.chosenSeasonId = seasonId || null;
+        if (seasonId) {
+          const [rawTeams, rawGrades] = await Promise.all([
+            playhqFetch(env, `/v1/seasons/${seasonId}/teams`),
+            playhqFetch(env, `/v1/seasons/${seasonId}/grades`),
+          ]);
+          debugInfo.rawTeams = rawTeams;
+          debugInfo.rawGrades = rawGrades;
+        }
+      } catch (err) {
+        debugInfo.upstreamFetchError = err.message;
+      }
+
+      try {
+        const resolved = await resolveKatsGrade(env, db);
+        debugInfo.resolved = resolved;
+        const [rawGames, rawLadder] = await Promise.all([
+          playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`),
+          playhqFetch(env, `/v2/grades/${resolved.gradeId}/ladder`),
+        ]);
+        debugInfo.rawGames = rawGames;
+        debugInfo.rawLadder = rawLadder;
+      } catch (err) {
+        debugInfo.resolveError = err.message;
+      }
+
+      return json(debugInfo, { status: 200 }, origin, true);
     }
   } catch (err) {
     return json({ error: err.message }, { status: 502 }, origin, true);
