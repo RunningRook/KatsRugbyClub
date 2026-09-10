@@ -145,16 +145,19 @@ BC Rugby's page is itself powered by PlayHQ's data underneath, but the club want
 link to be BC Rugby's own branded page rather than PlayHQ directly, so this link-out card stays
 either way.
 
-**A live fixtures/ladder widget now sits alongside it.** The club obtained a PlayHQ API key,
-tenant (`rca`) and organisation ID, so `2023-24-season.html` (fixtures + ladder) and `index.html`
-("Next up" teaser) now also pull live data via `assets/js/playhq.js`, which talks to the
-Cloudflare Worker's `/playhq/fixtures` and `/playhq/ladder` endpoints (the same Worker that backs
-`/check-in/` — see `worker/README.md`'s "PlayHQ live fixtures & ladder" section for setup,
-verification steps, and an important caveat: this build environment can't reach `playhq.com` at
-all, so the response field-name mapping is a best-effort guess from PlayHQ's docs, not verified
-against a live call — the widget is written to degrade to simply staying hidden if that guess is
-wrong, rather than showing broken data). **The PlayHQ API key itself is a Worker secret, never
-committed to this repo** — same pattern as the check-in tool's `ACCESS_KEY`.
+**A live fixtures/ladder widget now sits alongside it, deployed and confirmed working.** The
+club obtained a PlayHQ API key, tenant (`rca`) and organisation ID, so `2023-24-season.html`
+(fixtures + ladder) and `index.html` ("Next up" teaser) now also pull live data via
+`assets/js/playhq.js`, which talks to the Cloudflare Worker's `/playhq/fixtures` and
+`/playhq/ladder` endpoints (the same Worker that backs `/check-in/`). It correctly resolves to
+the real team ("Kats Men's Division 2", grade "Senior Men Division 2") against PlayHQ's live API
+— see `worker/README.md`'s "PlayHQ live fixtures & ladder" section for the full story, including
+one real bug that surfaced and got fixed post-deploy (team name matching was unreliable across
+PlayHQ's full multi-club team list; fixed by matching on club ID instead). As of this writing the
+widget shows nothing yet because the 2026/27 season's first game hasn't been played — confirmed
+correct, not broken, and it needs no further action to start populating once results come in.
+**The PlayHQ API key itself is a Worker secret, never committed to this repo** — same pattern as
+the check-in tool's `ACCESS_KEY`.
 
 ### How this was verified (so it doesn't get pasted-in blind next season)
 

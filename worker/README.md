@@ -152,19 +152,34 @@ and PlayHQ isn't hit on every single page load — see the big comment above
 `handlePlayhq()` in `src/index.js` for how the org → season → team → grade
 lookup works and how it's cached in the `playhq_cache` D1 table.
 
-**This could not be tested end-to-end before it shipped** — same root
-cause as "I can't run these commands myself" above, except here it's not
-just Wrangler: this build environment's network is blocked from reaching
-`playhq.com` at all (confirmed by a direct `curl`, which failed at the
-egress proxy, not at PlayHQ). So while the *endpoint paths* below come
-directly from the API guide the club was given (each doc link's URL
-literally spells out `/v1/organisations/:id/seasons` etc.), the exact
-*field names* in each JSON response (`homeTeam` vs `HomeTeam` vs something
-else entirely) are a best-effort guess from PlayHQ's public docs, not a
-verified match. `pick()` in `src/index.js` hedges by trying several likely
-spellings per field, and everything degrades safely if it's wrong — a bad
-guess just means the widget silently stays hidden, not a broken page (see
-the comment at the top of `assets/js/playhq.js`).
+**Status: deployed and confirmed working (2026-09-10).** This build
+environment's network can't reach `playhq.com` at all (confirmed by a
+direct `curl` failing at the egress proxy, not at PlayHQ), so none of this
+could be tested from here — it shipped as a best-effort reading of PlayHQ's
+docs, then someone with real Cloudflare/PlayHQ access deployed it and
+walked through the verification steps below. What that turned up:
+
+- Org → season → team → grade resolution works correctly against the real
+  API, resolving to team **"Kats Men's Division 2"** in grade **"Senior Men
+  Division 2"**. This needed one real fix along the way: `/v1/seasons/:id/teams`
+  returns every team in the *entire* BC Rugby competition (hundreds,
+  paginated), not just this org's, and matching by team **name** was
+  unreliable (a Kelowna Crows team happens to be named "KRFC U12 Boys",
+  which would have false-matched a naive "kats"/"krfc" search). Fixed by
+  paginating through all pages and matching each team's `club.id` against
+  the org's own verified ID instead — see `playhqFetchAllPages()` and
+  `resolveKatsGrade()` in `src/index.js`.
+- `/playhq/fixtures` and `/playhq/ladder` both return correctly-shaped
+  empty results (`"games":[]` / `"ladder":[]`) — confirmed genuinely
+  correct, not a bug: the 2026/27 season's first game is this Saturday, so
+  PlayHQ has nothing loaded yet. **The `normalizeGame()`/`normalizeLadderRow()`
+  field-name mapping is therefore still unverified against a real game/ladder
+  row** (only against an empty array) — if the widget stays empty even
+  after games are played, that mapping is the first thing to check via
+  `/playhq/debug` (below).
+- No redeploy needed once PlayHQ has real data — the endpoints poll PlayHQ
+  live (cached ~10 minutes) and the widget will start populating on its own
+  the moment results start coming in.
 
 **Setup (once):**
 
@@ -175,9 +190,10 @@ the comment at the top of `assets/js/playhq.js`).
    ```
 2. `PLAYHQ_TENANT`, `PLAYHQ_ORG_ID` and `PLAYHQ_TEAM_MATCH` are already set
    as plain vars in `wrangler.toml` (they're not sensitive — the org ID is
-   already published in this repo's root `README.md`). Only change
-   `PLAYHQ_TEAM_MATCH` if "kats" ever stops uniquely matching the right
-   team in PlayHQ's team list for the season.
+   already published in this repo's root `README.md`). Team resolution
+   matches on `PLAYHQ_ORG_ID` directly (via each team's `club.id`), so
+   `PLAYHQ_TEAM_MATCH` is only a fallback for the unlikely case that field
+   isn't populated — nothing to change here normally.
 3. Apply the schema update for the new `playhq_cache` table (safe to
    re-run — same command as step 3 above):
    ```bash
@@ -195,17 +211,21 @@ curl "https://kats-checkin-api.katsrfc.workers.dev/playhq/ladder"
 
 - Games/ladder rows with real teams, dates and scores → it worked, nothing
   more to do.
-- `{"error": "..."}`, or `{"games": []}` / `{"ladder": []}` → open
+- `"team":{"name":"Kats Men's Division 2", ...}` with `"games":[]` (or
+  `"ladder":[]`) → this is the confirmed-correct state before/just after a
+  round has actually been played (see "Status" above) — not a bug, no
+  action needed, it'll populate on its own.
+- `{"error": "..."}` → open
   `https://kats-checkin-api.katsrfc.workers.dev/playhq/debug?key=YOUR_ACCESS_KEY`
-  (reuses the check-in `ACCESS_KEY` from step 4 above, just to keep this
-  worker from being usable as a free anonymous PlayHQ proxy). It dumps the
-  resolved season/team/grade IDs plus PlayHQ's raw, unmodified JSON for the
-  games and ladder calls. Compare that raw JSON's actual field names
-  against `normalizeGame()` / `normalizeLadderRow()` / `resolveKatsGrade()`
-  in `src/index.js`, fix whichever `pick(...)` lines guessed wrong, and
-  `wrangler deploy` again. If it's an authorization error instead, double
-  check the API key and `x-phq-tenant` value (`rca`) are exactly what the
-  club was given.
+  (reuses the check-in `ACCESS_KEY`, just to keep this worker from being
+  usable as a free anonymous PlayHQ proxy). It reports the resolved
+  season/team/grade, a team-count + club-list summary if team resolution
+  itself failed, and raw upstream JSON for the games/ladder calls. Compare
+  that raw JSON's actual field names against `normalizeGame()` /
+  `normalizeLadderRow()` / `resolveKatsGrade()` in `src/index.js`, fix
+  whichever `pick(...)` lines guessed wrong, and `wrangler deploy` again.
+  If it's an authorization error instead, double check the API key and
+  `x-phq-tenant` value (`rca`) are exactly what the club was given.
 
 If you'd rather not deal with any of this, the site works fine without
 it — the widget just never appears and the existing "View on BC Rugby"
