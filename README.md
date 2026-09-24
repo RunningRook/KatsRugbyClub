@@ -139,9 +139,13 @@ Rugby. `fixtures-results.html` (full fixtures list + ladder table) and `index.ht
 teaser) pull live data via `assets/js/playhq.js`, which talks to the Cloudflare Worker's
 `/playhq/fixtures` and `/playhq/ladder` endpoints (the same Worker that backs `/check-in/`) — see
 `worker/README.md`'s "PlayHQ live fixtures & ladder" section for the full setup story, including
-two real bugs caught and fixed post-deploy (team matching, and the games/ladder response shapes).
-**The PlayHQ API key itself is a Worker secret, never committed to this repo** — same pattern as
-the check-in tool's `ACCESS_KEY`.
+three real bugs caught and fixed post-deploy (team matching, the games/ladder response shapes, and
+where a completed game's actual score lives). **The PlayHQ API key itself is a Worker secret,
+never committed to this repo** — same pattern as the check-in tool's `ACCESS_KEY`.
+
+The fixtures list is also available as a subscribable calendar feed
+(`/playhq/fixtures.ics`, same Worker) — see `fixtures-results.html`'s "Add to Calendar" link and
+`worker/README.md`'s "Calendar feed" section.
 
 An earlier version of this page linked out to BC Rugby's own fixtures/results page
 (`https://www.bcrugby.com/fixtures---results0adb61e3`) instead, back when a live embed wasn't

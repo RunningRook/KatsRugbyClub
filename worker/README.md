@@ -244,5 +244,45 @@ curl "https://kats-checkin-api.katsrfc.workers.dev/playhq/ladder"
   value (`rca`) are exactly what the club was given.
 
 If you'd rather not deal with any of this, the site works fine without
-it — the widget just never appears and the existing "View on BC Rugby"
-link-out card (already there regardless) stays the only fixtures/ladder UI.
+it — the widget just never appears (see `#playhq-fallback` in
+`fixtures-results.html`), it doesn't break the page.
+
+**Fixed (2026-09-24): scores for played games weren't showing.** The
+original score extraction (`home.outcome.score` / `outcome.points`) was a
+guess made before any game had been played, since PlayHQ's `outcome` was
+`null` for every game during initial testing (see "Status" above). Once a
+real completed game was checked via `/playhq/debug`, the actual shape
+turned out more involved than a simple field-name miss:
+
+- `game.teams[].outcome` is just a result **string**
+  (`"WON"`/`"LOST"`/`"WON_BY_FORFEIT"`/`"LOST_BY_FORFEIT"`/`null`
+  pre-game) — never a score.
+- The real score lives in `game.match.teams[].outcome.statistics[]`, an
+  array of `{type, value}` stat entries (`TOTAL_SCORE` is the final score),
+  keyed by team id and joined back to home/away by matching that id.
+- A forfeited game has **no `match` object at all** — there's genuinely no
+  score to show, so `normalizeGamesResponse()` sets a `resultNote: "Forfeit"`
+  field instead, which the frontend (`assets/js/playhq.js`) and the
+  calendar feed both fall back to display when there's no numeric score.
+- This also fixed a second bug it exposed: the homepage "Next up" teaser
+  picked the first game with no numeric score, which wrongly resurfaced a
+  *past* forfeited game (no score either) as if it were upcoming — fixed to
+  filter on `status !== "FINAL"` instead.
+
+### Calendar feed (`/playhq/fixtures.ics`)
+
+Also public, un-gated, and served from the same cached fixtures data as
+`/playhq/fixtures` (see `getFixturesPayload()`) rather than a second PlayHQ
+fetch. One `VEVENT` per fixture (kickoff time + an estimated 2-hour
+duration, since PlayHQ doesn't give match length; venue; score in the
+description once played). `fixtures-results.html`'s "Add to Calendar" link
+points a `webcal://` URL at it — tapping that on iOS/macOS opens the native
+"subscribe to this calendar" sheet, which re-fetches this URL periodically
+so new fixtures and results show up without re-adding anything. Android and
+desktop calendar apps generally don't handle `webcal://` reliably, so the
+page also shows the plain `https://` URL as a fallback to paste into their
+own "Add calendar by URL" flow (Google Calendar, Outlook, etc.).
+
+No extra setup beyond the steps above — it reuses the same
+`PLAYHQ_API_KEY`/`playhq_cache` already configured for fixtures/ladder; it
+just renders whatever `getFixturesPayload()` returns, scores included.

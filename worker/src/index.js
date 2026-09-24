@@ -283,17 +283,22 @@ async function resolveKatsGrade(env, db) {
   return resolved;
 }
 
-// GET /v2/grades/:id/games -- confirmed against a real response. Not a
-// flat list of games at all: it's { rounds: [{ name, games: [...] }],
-// teams: [{id,name}], playingSurfaces: [{id, venue:{name,...}}] }, and
-// crucially it's every team's fixtures for the whole grade (e.g. 10 teams
-// round-robin), not just this org's -- so `teamId` (Kats' resolved team
-// id) filters it down to just the games Kats is actually in. Each game
-// references team/surface IDs into the lookup tables above rather than
-// embedding names directly, and each team entry on the game carries
-// isHomeTeam + an `outcome` (null pre-game -- its shape once a result
-// exists is still unverified, so score extraction below is a best-effort
-// guess; everything else in this function is confirmed).
+// GET /v2/grades/:id/games -- confirmed against a real response, including
+// a completed (status FINAL) and a forfeited game. Not a flat list of
+// games at all: it's { rounds: [{ name, games: [...] }], teams: [{id,name}],
+// playingSurfaces: [{id, venue:{name,...}}] }, and crucially it's every
+// team's fixtures for the whole grade (e.g. 10 teams round-robin), not
+// just this org's -- so `teamId` (Kats' resolved team id) filters it down
+// to just the games Kats is actually in. Each game references team/surface
+// IDs into the lookup tables above rather than embedding names directly.
+//
+// The score is NOT on game.teams[].outcome -- that's just a result string
+// ("WON"/"LOST"/"WON_BY_FORFEIT"/"LOST_BY_FORFEIT"/null pre-game). The
+// actual score lives in game.match.teams[].outcome.statistics[], an array
+// of {type,value} stat entries (TOTAL_SCORE is the final score) keyed by
+// team id, matched back to home/away via that id. A forfeited game has no
+// `match` object at all -- there's no score to show, so `resultNote` falls
+// back to the outcome string ("Forfeit") for those.
 function normalizeGamesResponse(body, teamId) {
   const teamNameById = {};
   for (const t of asArray(body && body.teams)) {
@@ -316,6 +321,16 @@ function normalizeGamesResponse(body, teamId) {
       const homeId = home && pick(home, ["id", "Id"]);
       const awayId = away && pick(away, ["id", "Id"]);
       if (teamId && homeId !== teamId && awayId !== teamId) continue; // not one of Kats' games
+
+      const scoreByTeamId = {};
+      for (const mt of asArray(g.match && g.match.teams)) {
+        const stat = asArray(mt.outcome && mt.outcome.statistics).find((s) => pick(s, ["type", "Type"]) === "TOTAL_SCORE");
+        if (stat) scoreByTeamId[pick(mt, ["id", "Id"])] = pick(stat, ["value", "Value"]);
+      }
+      const homeOutcome = home && pick(home, ["outcome", "Outcome"]);
+      const awayOutcome = away && pick(away, ["outcome", "Outcome"]);
+      const isForfeit = (typeof homeOutcome === "string" && /FORFEIT/.test(homeOutcome)) || (typeof awayOutcome === "string" && /FORFEIT/.test(awayOutcome));
+
       games.push({
         id: pick(g, ["id", "Id"]),
         round: roundName,
@@ -324,9 +339,10 @@ function normalizeGamesResponse(body, teamId) {
         venue: venueBySurfaceId[surfaceId],
         homeTeam: teamNameById[homeId] || homeId,
         awayTeam: teamNameById[awayId] || awayId,
-        // Unverified -- no completed game seen yet to confirm outcome's shape.
-        homeScore: home && pick(home, ["outcome.score", "Outcome.Score", "outcome.points"]),
-        awayScore: away && pick(away, ["outcome.score", "Outcome.Score", "outcome.points"]),
+        homeScore: scoreByTeamId[homeId] != null ? scoreByTeamId[homeId] : null,
+        awayScore: scoreByTeamId[awayId] != null ? scoreByTeamId[awayId] : null,
+        // Set only when there's no numeric score to show (a forfeit).
+        resultNote: isForfeit ? "Forfeit" : null,
       });
     }
   }
@@ -368,20 +384,139 @@ function normalizeLadderResponse(body) {
   });
 }
 
+// Shared by /playhq/fixtures (JSON) and /playhq/fixtures.ics (calendar feed)
+// so both read the same cache instead of double-fetching PlayHQ. Returns
+// stale cached data (marked `.stale`/`.error`) rather than throwing when a
+// fresh fetch fails but a previous one succeeded; only throws when there's
+// nothing to fall back on.
+async function getFixturesPayload(env, db) {
+  const cached = await cacheGet(db, "fixtures", PLAYHQ_DATA_TTL_MS);
+  if (cached && cached.fresh) return cached.data;
+  try {
+    const resolved = await resolveKatsGrade(env, db);
+    const games = normalizeGamesResponse(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`), resolved.teamId);
+    const payload = { team: { id: resolved.teamId, name: resolved.teamName }, grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), games };
+    await cacheSet(db, "fixtures", payload);
+    return payload;
+  } catch (err) {
+    if (cached) return { ...cached.data, stale: true, error: err.message };
+    throw err;
+  }
+}
+
+function icsEscape(text) {
+  return String(text == null ? "" : text)
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n");
+}
+
+// RFC5545 §3.1: content lines SHOULD be folded at 75 octets, continuation
+// lines start with a single space. Char-count approximation (fine here --
+// team/venue names are all plain ASCII).
+function icsFoldLine(line) {
+  if (line.length <= 75) return line;
+  let result = line.slice(0, 75);
+  let rest = line.slice(75);
+  while (rest.length > 0) {
+    result += "\r\n " + rest.slice(0, 74);
+    rest = rest.slice(74);
+  }
+  return result;
+}
+
+// PlayHQ's game dateTimes are already UTC ("...Z") -- reformat to
+// YYYYMMDDTHHMMSSZ per RFC5545.
+function icsDateUtc(isoString) {
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+// PlayHQ doesn't give match duration -- estimate 2 hours (kickoff plus
+// warmup/full match/handshakes) so the calendar event isn't a single instant.
+const GAME_DURATION_MS = 2 * 60 * 60 * 1000;
+
+// Builds a subscribable calendar feed from the same games list the JSON
+// endpoint returns. One VEVENT per fixture; a calendar app re-fetching this
+// URL periodically (an "Add by URL" subscription, not a one-time import)
+// picks up new games, date/venue changes, and scores automatically.
+function buildIcs(payload) {
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Kats Rugby Club//Fixtures//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "X-WR-CALNAME:Kats RFC Fixtures",
+    "X-WR-TIMEZONE:America/Vancouver",
+  ];
+  const dtstamp = icsDateUtc(new Date().toISOString());
+  for (const g of payload.games || []) {
+    const start = icsDateUtc(g.date);
+    if (!start) continue; // no confirmed kickoff time -- nothing to put on a calendar
+    const end = icsDateUtc(new Date(new Date(g.date).getTime() + GAME_DURATION_MS).toISOString());
+    const isHome = /kats/i.test(String(g.homeTeam || ""));
+    const opponent = isHome ? g.awayTeam : g.homeTeam;
+    const summary = "Kats RFC " + (isHome ? "vs" : "@") + " " + (opponent || "TBC");
+    const hasScore = g.homeScore != null && g.awayScore != null;
+    const resultLine = hasScore
+      ? "Score: " + g.homeTeam + " " + g.homeScore + " – " + g.awayScore + " " + g.awayTeam
+      : g.resultNote
+        ? "Result: " + g.resultNote
+        : null;
+    const description = [g.round ? "Round: " + g.round : null, resultLine].filter(Boolean).join("\\n");
+    lines.push(
+      "BEGIN:VEVENT",
+      "UID:" + (g.id || start + "-" + summary) + "@katsrugbyclub.com",
+      "DTSTAMP:" + dtstamp,
+      "DTSTART:" + start,
+      "DTEND:" + end,
+      "SUMMARY:" + icsEscape(summary),
+      g.venue ? "LOCATION:" + icsEscape(g.venue) : null,
+      description ? "DESCRIPTION:" + icsEscape(description) : null,
+      "STATUS:CONFIRMED",
+      "END:VEVENT"
+    );
+  }
+  lines.push("END:VCALENDAR");
+  return (
+    lines
+      .filter((l) => l != null)
+      .map(icsFoldLine)
+      .join("\r\n") + "\r\n"
+  );
+}
+
 async function handlePlayhq(request, env, db, path, origin) {
   try {
     if (path === "/playhq/fixtures" && request.method === "GET") {
-      const cached = await cacheGet(db, "fixtures", PLAYHQ_DATA_TTL_MS);
-      if (cached && cached.fresh) return json(cached.data, { status: 200 }, origin, true);
       try {
-        const resolved = await resolveKatsGrade(env, db);
-        const games = normalizeGamesResponse(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`), resolved.teamId);
-        const payload = { team: { id: resolved.teamId, name: resolved.teamName }, grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), games };
-        await cacheSet(db, "fixtures", payload);
-        return json(payload, { status: 200 }, origin, true);
+        return json(await getFixturesPayload(env, db), { status: 200 }, origin, true);
       } catch (err) {
-        // Serve stale-but-cached data over a hard error when we have it.
-        if (cached) return json({ ...cached.data, stale: true, error: err.message }, { status: 200 }, origin, true);
+        return json({ error: err.message }, { status: 502 }, origin, true);
+      }
+    }
+
+    // ---------- GET /playhq/fixtures.ics ----------
+    // Subscribable calendar feed of Kats' fixtures -- add this URL to a
+    // phone/desktop calendar app ("subscribe by URL", not a one-time
+    // import) and it re-fetches periodically, picking up new games and
+    // results without re-downloading anything manually. See
+    // assets/js/playhq.js for the page's "Add to Calendar" link.
+    if (path === "/playhq/fixtures.ics" && request.method === "GET") {
+      try {
+        const ics = buildIcs(await getFixturesPayload(env, db));
+        return new Response(ics, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/calendar; charset=utf-8",
+            "Content-Disposition": 'inline; filename="kats-rfc-fixtures.ics"',
+            ...corsHeaders(origin, true),
+          },
+        });
+      } catch (err) {
         return json({ error: err.message }, { status: 502 }, origin, true);
       }
     }
