@@ -662,7 +662,7 @@ textarea {
   white-space: nowrap;
 }
 .calendar-link:hover { background: var(--kats-green); color: var(--paper); }
-.calendar-link svg { width: 15px; height: 15px; flex-shrink: 0; }
+.calendar-link svg { width: 16px; height: 16px; flex-shrink: 0; }
 
 /* On the dark homepage card, match its own text treatment instead of the
    default ink-soft (too low-contrast on the green gradient background). */
