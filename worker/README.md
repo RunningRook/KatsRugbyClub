@@ -247,15 +247,27 @@ If you'd rather not deal with any of this, the site works fine without
 it — the widget just never appears (see `#playhq-fallback` in
 `fixtures-results.html`), it doesn't break the page.
 
-**Known issue (2026-09-24): scores for played games aren't showing.**
-`normalizeGamesResponse()`'s score extraction (`home.outcome.score` /
-`outcome.points`) was a guess made before any game had been played, since
-PlayHQ's `outcome` field was `null` for every game during initial testing
-(see "Status" above). Now that games have actually been played, that guess
-is confirmed wrong. Fix the same way as any other field-mapping miss: pull
-`rawGames` from `/playhq/debug` for a completed game, find the real path to
-its score under `teams[].outcome`, and update the two `pick(...)` calls for
-`homeScore`/`awayScore` in `normalizeGamesResponse()`.
+**Fixed (2026-09-24): scores for played games weren't showing.** The
+original score extraction (`home.outcome.score` / `outcome.points`) was a
+guess made before any game had been played, since PlayHQ's `outcome` was
+`null` for every game during initial testing (see "Status" above). Once a
+real completed game was checked via `/playhq/debug`, the actual shape
+turned out more involved than a simple field-name miss:
+
+- `game.teams[].outcome` is just a result **string**
+  (`"WON"`/`"LOST"`/`"WON_BY_FORFEIT"`/`"LOST_BY_FORFEIT"`/`null`
+  pre-game) — never a score.
+- The real score lives in `game.match.teams[].outcome.statistics[]`, an
+  array of `{type, value}` stat entries (`TOTAL_SCORE` is the final score),
+  keyed by team id and joined back to home/away by matching that id.
+- A forfeited game has **no `match` object at all** — there's genuinely no
+  score to show, so `normalizeGamesResponse()` sets a `resultNote: "Forfeit"`
+  field instead, which the frontend (`assets/js/playhq.js`) and the
+  calendar feed both fall back to display when there's no numeric score.
+- This also fixed a second bug it exposed: the homepage "Next up" teaser
+  picked the first game with no numeric score, which wrongly resurfaced a
+  *past* forfeited game (no score either) as if it were upcoming — fixed to
+  filter on `status !== "FINAL"` instead.
 
 ### Calendar feed (`/playhq/fixtures.ics`)
 
@@ -272,6 +284,5 @@ page also shows the plain `https://` URL as a fallback to paste into their
 own "Add calendar by URL" flow (Google Calendar, Outlook, etc.).
 
 No extra setup beyond the steps above — it reuses the same
-`PLAYHQ_API_KEY`/`playhq_cache` already configured for fixtures/ladder. If
-scores are missing here too, that's the same known issue above (this feed
-just renders whatever `getFixturesPayload()` returns).
+`PLAYHQ_API_KEY`/`playhq_cache` already configured for fixtures/ladder; it
+just renders whatever `getFixturesPayload()` returns, scores included.

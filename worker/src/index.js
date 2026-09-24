@@ -283,17 +283,22 @@ async function resolveKatsGrade(env, db) {
   return resolved;
 }
 
-// GET /v2/grades/:id/games -- confirmed against a real response. Not a
-// flat list of games at all: it's { rounds: [{ name, games: [...] }],
-// teams: [{id,name}], playingSurfaces: [{id, venue:{name,...}}] }, and
-// crucially it's every team's fixtures for the whole grade (e.g. 10 teams
-// round-robin), not just this org's -- so `teamId` (Kats' resolved team
-// id) filters it down to just the games Kats is actually in. Each game
-// references team/surface IDs into the lookup tables above rather than
-// embedding names directly, and each team entry on the game carries
-// isHomeTeam + an `outcome` (null pre-game -- its shape once a result
-// exists is still unverified, so score extraction below is a best-effort
-// guess; everything else in this function is confirmed).
+// GET /v2/grades/:id/games -- confirmed against a real response, including
+// a completed (status FINAL) and a forfeited game. Not a flat list of
+// games at all: it's { rounds: [{ name, games: [...] }], teams: [{id,name}],
+// playingSurfaces: [{id, venue:{name,...}}] }, and crucially it's every
+// team's fixtures for the whole grade (e.g. 10 teams round-robin), not
+// just this org's -- so `teamId` (Kats' resolved team id) filters it down
+// to just the games Kats is actually in. Each game references team/surface
+// IDs into the lookup tables above rather than embedding names directly.
+//
+// The score is NOT on game.teams[].outcome -- that's just a result string
+// ("WON"/"LOST"/"WON_BY_FORFEIT"/"LOST_BY_FORFEIT"/null pre-game). The
+// actual score lives in game.match.teams[].outcome.statistics[], an array
+// of {type,value} stat entries (TOTAL_SCORE is the final score) keyed by
+// team id, matched back to home/away via that id. A forfeited game has no
+// `match` object at all -- there's no score to show, so `resultNote` falls
+// back to the outcome string ("Forfeit") for those.
 function normalizeGamesResponse(body, teamId) {
   const teamNameById = {};
   for (const t of asArray(body && body.teams)) {
@@ -316,6 +321,16 @@ function normalizeGamesResponse(body, teamId) {
       const homeId = home && pick(home, ["id", "Id"]);
       const awayId = away && pick(away, ["id", "Id"]);
       if (teamId && homeId !== teamId && awayId !== teamId) continue; // not one of Kats' games
+
+      const scoreByTeamId = {};
+      for (const mt of asArray(g.match && g.match.teams)) {
+        const stat = asArray(mt.outcome && mt.outcome.statistics).find((s) => pick(s, ["type", "Type"]) === "TOTAL_SCORE");
+        if (stat) scoreByTeamId[pick(mt, ["id", "Id"])] = pick(stat, ["value", "Value"]);
+      }
+      const homeOutcome = home && pick(home, ["outcome", "Outcome"]);
+      const awayOutcome = away && pick(away, ["outcome", "Outcome"]);
+      const isForfeit = (typeof homeOutcome === "string" && /FORFEIT/.test(homeOutcome)) || (typeof awayOutcome === "string" && /FORFEIT/.test(awayOutcome));
+
       games.push({
         id: pick(g, ["id", "Id"]),
         round: roundName,
@@ -324,9 +339,10 @@ function normalizeGamesResponse(body, teamId) {
         venue: venueBySurfaceId[surfaceId],
         homeTeam: teamNameById[homeId] || homeId,
         awayTeam: teamNameById[awayId] || awayId,
-        // Unverified -- no completed game seen yet to confirm outcome's shape.
-        homeScore: home && pick(home, ["outcome.score", "Outcome.Score", "outcome.points"]),
-        awayScore: away && pick(away, ["outcome.score", "Outcome.Score", "outcome.points"]),
+        homeScore: scoreByTeamId[homeId] != null ? scoreByTeamId[homeId] : null,
+        awayScore: scoreByTeamId[awayId] != null ? scoreByTeamId[awayId] : null,
+        // Set only when there's no numeric score to show (a forfeit).
+        resultNote: isForfeit ? "Forfeit" : null,
       });
     }
   }
@@ -445,9 +461,12 @@ function buildIcs(payload) {
     const opponent = isHome ? g.awayTeam : g.homeTeam;
     const summary = "Kats RFC " + (isHome ? "vs" : "@") + " " + (opponent || "TBC");
     const hasScore = g.homeScore != null && g.awayScore != null;
-    const description = [g.round ? "Round: " + g.round : null, hasScore ? "Score: " + g.homeTeam + " " + g.homeScore + " – " + g.awayScore + " " + g.awayTeam : null]
-      .filter(Boolean)
-      .join("\\n");
+    const resultLine = hasScore
+      ? "Score: " + g.homeTeam + " " + g.homeScore + " – " + g.awayScore + " " + g.awayTeam
+      : g.resultNote
+        ? "Result: " + g.resultNote
+        : null;
+    const description = [g.round ? "Round: " + g.round : null, resultLine].filter(Boolean).join("\\n");
     lines.push(
       "BEGIN:VEVENT",
       "UID:" + (g.id || start + "-" + summary) + "@katsrugbyclub.com",

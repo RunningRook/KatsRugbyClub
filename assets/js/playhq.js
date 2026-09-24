@@ -54,7 +54,7 @@
     var opponent = isKats(g.homeTeam) ? g.awayTeam : g.homeTeam;
     var prefix = isKats(g.homeTeam) ? "vs" : "@";
     var hasScore = g.homeScore != null && g.awayScore != null;
-    var scoreHtml = hasScore ? escapeHtml(g.homeScore) + " – " + escapeHtml(g.awayScore) : "";
+    var scoreHtml = hasScore ? escapeHtml(g.homeScore) + " – " + escapeHtml(g.awayScore) : g.resultNote ? escapeHtml(g.resultNote) : "";
     var time = fmtTime(g.date);
     return (
       '<div class="fixture">' +
@@ -124,8 +124,11 @@
   // Homepage teaser: just the next game with no result yet, e.g.
   // "Next up: vs Chilliwack — Sat, Sep 26". Independent of the full
   // fixtures list on the season page — either or both may be on a page.
+  // Filtered by status rather than a missing score: a forfeited game is
+  // FINAL (it's in the past) but still has no numeric score, so checking
+  // scores alone would wrongly resurface it as "next up".
   function renderNextFixture(el, games) {
-    var next = games.filter(function (g) { return g.homeScore == null && g.awayScore == null; })[0];
+    var next = games.filter(function (g) { return g.status !== "FINAL"; })[0];
     if (!next) return;
     var opponent = isKats(next.homeTeam) ? next.awayTeam : next.homeTeam;
     var prefix = isKats(next.homeTeam) ? "vs" : "@";
