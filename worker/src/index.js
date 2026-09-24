@@ -368,20 +368,136 @@ function normalizeLadderResponse(body) {
   });
 }
 
+// Shared by /playhq/fixtures (JSON) and /playhq/fixtures.ics (calendar feed)
+// so both read the same cache instead of double-fetching PlayHQ. Returns
+// stale cached data (marked `.stale`/`.error`) rather than throwing when a
+// fresh fetch fails but a previous one succeeded; only throws when there's
+// nothing to fall back on.
+async function getFixturesPayload(env, db) {
+  const cached = await cacheGet(db, "fixtures", PLAYHQ_DATA_TTL_MS);
+  if (cached && cached.fresh) return cached.data;
+  try {
+    const resolved = await resolveKatsGrade(env, db);
+    const games = normalizeGamesResponse(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`), resolved.teamId);
+    const payload = { team: { id: resolved.teamId, name: resolved.teamName }, grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), games };
+    await cacheSet(db, "fixtures", payload);
+    return payload;
+  } catch (err) {
+    if (cached) return { ...cached.data, stale: true, error: err.message };
+    throw err;
+  }
+}
+
+function icsEscape(text) {
+  return String(text == null ? "" : text)
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n");
+}
+
+// RFC5545 §3.1: content lines SHOULD be folded at 75 octets, continuation
+// lines start with a single space. Char-count approximation (fine here --
+// team/venue names are all plain ASCII).
+function icsFoldLine(line) {
+  if (line.length <= 75) return line;
+  let result = line.slice(0, 75);
+  let rest = line.slice(75);
+  while (rest.length > 0) {
+    result += "\r\n " + rest.slice(0, 74);
+    rest = rest.slice(74);
+  }
+  return result;
+}
+
+// PlayHQ's game dateTimes are already UTC ("...Z") -- reformat to
+// YYYYMMDDTHHMMSSZ per RFC5545.
+function icsDateUtc(isoString) {
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+// PlayHQ doesn't give match duration -- estimate 2 hours (kickoff plus
+// warmup/full match/handshakes) so the calendar event isn't a single instant.
+const GAME_DURATION_MS = 2 * 60 * 60 * 1000;
+
+// Builds a subscribable calendar feed from the same games list the JSON
+// endpoint returns. One VEVENT per fixture; a calendar app re-fetching this
+// URL periodically (an "Add by URL" subscription, not a one-time import)
+// picks up new games, date/venue changes, and scores automatically.
+function buildIcs(payload) {
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Kats Rugby Club//Fixtures//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "X-WR-CALNAME:Kats RFC Fixtures",
+    "X-WR-TIMEZONE:America/Vancouver",
+  ];
+  const dtstamp = icsDateUtc(new Date().toISOString());
+  for (const g of payload.games || []) {
+    const start = icsDateUtc(g.date);
+    if (!start) continue; // no confirmed kickoff time -- nothing to put on a calendar
+    const end = icsDateUtc(new Date(new Date(g.date).getTime() + GAME_DURATION_MS).toISOString());
+    const isHome = /kats/i.test(String(g.homeTeam || ""));
+    const opponent = isHome ? g.awayTeam : g.homeTeam;
+    const summary = "Kats RFC " + (isHome ? "vs" : "@") + " " + (opponent || "TBC");
+    const hasScore = g.homeScore != null && g.awayScore != null;
+    const description = [g.round ? "Round: " + g.round : null, hasScore ? "Score: " + g.homeTeam + " " + g.homeScore + " – " + g.awayScore + " " + g.awayTeam : null]
+      .filter(Boolean)
+      .join("\\n");
+    lines.push(
+      "BEGIN:VEVENT",
+      "UID:" + (g.id || start + "-" + summary) + "@katsrugbyclub.com",
+      "DTSTAMP:" + dtstamp,
+      "DTSTART:" + start,
+      "DTEND:" + end,
+      "SUMMARY:" + icsEscape(summary),
+      g.venue ? "LOCATION:" + icsEscape(g.venue) : null,
+      description ? "DESCRIPTION:" + icsEscape(description) : null,
+      "STATUS:CONFIRMED",
+      "END:VEVENT"
+    );
+  }
+  lines.push("END:VCALENDAR");
+  return (
+    lines
+      .filter((l) => l != null)
+      .map(icsFoldLine)
+      .join("\r\n") + "\r\n"
+  );
+}
+
 async function handlePlayhq(request, env, db, path, origin) {
   try {
     if (path === "/playhq/fixtures" && request.method === "GET") {
-      const cached = await cacheGet(db, "fixtures", PLAYHQ_DATA_TTL_MS);
-      if (cached && cached.fresh) return json(cached.data, { status: 200 }, origin, true);
       try {
-        const resolved = await resolveKatsGrade(env, db);
-        const games = normalizeGamesResponse(await playhqFetch(env, `/v2/grades/${resolved.gradeId}/games`), resolved.teamId);
-        const payload = { team: { id: resolved.teamId, name: resolved.teamName }, grade: { id: resolved.gradeId, name: resolved.gradeName }, updatedAt: nowIso(), games };
-        await cacheSet(db, "fixtures", payload);
-        return json(payload, { status: 200 }, origin, true);
+        return json(await getFixturesPayload(env, db), { status: 200 }, origin, true);
       } catch (err) {
-        // Serve stale-but-cached data over a hard error when we have it.
-        if (cached) return json({ ...cached.data, stale: true, error: err.message }, { status: 200 }, origin, true);
+        return json({ error: err.message }, { status: 502 }, origin, true);
+      }
+    }
+
+    // ---------- GET /playhq/fixtures.ics ----------
+    // Subscribable calendar feed of Kats' fixtures -- add this URL to a
+    // phone/desktop calendar app ("subscribe by URL", not a one-time
+    // import) and it re-fetches periodically, picking up new games and
+    // results without re-downloading anything manually. See
+    // assets/js/playhq.js for the page's "Add to Calendar" link.
+    if (path === "/playhq/fixtures.ics" && request.method === "GET") {
+      try {
+        const ics = buildIcs(await getFixturesPayload(env, db));
+        return new Response(ics, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/calendar; charset=utf-8",
+            "Content-Disposition": 'inline; filename="kats-rfc-fixtures.ics"',
+            ...corsHeaders(origin, true),
+          },
+        });
+      } catch (err) {
         return json({ error: err.message }, { status: 502 }, origin, true);
       }
     }

@@ -93,6 +93,26 @@
     if (fallback) fallback.hidden = true;
   }
 
+  // Points the "Add to Calendar" link at the Worker's /playhq/fixtures.ics
+  // feed. webcal:// (rather than https://) is what makes tapping it on
+  // iOS/macOS offer to *subscribe* (auto-refreshing) instead of just
+  // downloading a one-time file; Android/desktop calendar apps generally
+  // want the plain https URL pasted into their own "Add by URL" flow
+  // instead, hence the second line.
+  function setupCalendarLinks() {
+    var subscribeLink = $("#playhq-calendar-subscribe");
+    var urlLink = $("#playhq-calendar-url");
+    var help = $("#playhq-calendar-help");
+    if (!subscribeLink && !urlLink) return;
+    var icsUrl = API_BASE + "/playhq/fixtures.ics";
+    if (subscribeLink) subscribeLink.href = icsUrl.replace(/^https?:/, "webcal:");
+    if (urlLink) {
+      urlLink.href = icsUrl;
+      urlLink.textContent = icsUrl;
+    }
+    if (help) help.hidden = false;
+  }
+
   function stampUpdated(data) {
     var el = $("#playhq-updated");
     if (!el || !data.updatedAt) return;
@@ -126,6 +146,7 @@
           list.innerHTML = data.games.map(fixtureRowHtml).join("");
           showWidget(list);
           stampUpdated(data);
+          setupCalendarLinks();
         }
         if (teaser) renderNextFixture(teaser, data.games);
       })

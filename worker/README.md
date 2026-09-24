@@ -244,5 +244,34 @@ curl "https://kats-checkin-api.katsrfc.workers.dev/playhq/ladder"
   value (`rca`) are exactly what the club was given.
 
 If you'd rather not deal with any of this, the site works fine without
-it — the widget just never appears and the existing "View on BC Rugby"
-link-out card (already there regardless) stays the only fixtures/ladder UI.
+it — the widget just never appears (see `#playhq-fallback` in
+`fixtures-results.html`), it doesn't break the page.
+
+**Known issue (2026-09-24): scores for played games aren't showing.**
+`normalizeGamesResponse()`'s score extraction (`home.outcome.score` /
+`outcome.points`) was a guess made before any game had been played, since
+PlayHQ's `outcome` field was `null` for every game during initial testing
+(see "Status" above). Now that games have actually been played, that guess
+is confirmed wrong. Fix the same way as any other field-mapping miss: pull
+`rawGames` from `/playhq/debug` for a completed game, find the real path to
+its score under `teams[].outcome`, and update the two `pick(...)` calls for
+`homeScore`/`awayScore` in `normalizeGamesResponse()`.
+
+### Calendar feed (`/playhq/fixtures.ics`)
+
+Also public, un-gated, and served from the same cached fixtures data as
+`/playhq/fixtures` (see `getFixturesPayload()`) rather than a second PlayHQ
+fetch. One `VEVENT` per fixture (kickoff time + an estimated 2-hour
+duration, since PlayHQ doesn't give match length; venue; score in the
+description once played). `fixtures-results.html`'s "Add to Calendar" link
+points a `webcal://` URL at it — tapping that on iOS/macOS opens the native
+"subscribe to this calendar" sheet, which re-fetches this URL periodically
+so new fixtures and results show up without re-adding anything. Android and
+desktop calendar apps generally don't handle `webcal://` reliably, so the
+page also shows the plain `https://` URL as a fallback to paste into their
+own "Add calendar by URL" flow (Google Calendar, Outlook, etc.).
+
+No extra setup beyond the steps above — it reuses the same
+`PLAYHQ_API_KEY`/`playhq_cache` already configured for fixtures/ladder. If
+scores are missing here too, that's the same known issue above (this feed
+just renders whatever `getFixturesPayload()` returns).

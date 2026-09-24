@@ -66,8 +66,21 @@
         <p class="playhq-widget-status" id="playhq-fallback">Loading live fixtures &amp; ladder&hellip;</p>
 
         <div class="playhq-widget" id="playhq-widget-fixtures" hidden>
-          <h3>Upcoming &amp; Recent</h3>
+          <div class="playhq-widget-header">
+            <h3>Upcoming &amp; Recent</h3>
+            <!-- Filled in by playhq.js: a webcal:// link so tapping it on a
+                 phone/Mac offers to subscribe (auto-updating) rather than
+                 just downloading a one-time file. -->
+            <a class="calendar-link" id="playhq-calendar-subscribe" href="#">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              Add to Calendar
+            </a>
+          </div>
           <div class="fixtures-list" id="playhq-fixtures"></div>
+          <p class="playhq-widget-status" id="playhq-calendar-help" hidden>
+            Android or desktop calendar apps usually want a plain URL instead &mdash; add this one as a
+            calendar subscription ("From URL"): <a id="playhq-calendar-url" href="#"></a>
+          </p>
         </div>
 
         <div class="playhq-widget" id="playhq-widget-ladder" hidden style="margin-top:40px;">

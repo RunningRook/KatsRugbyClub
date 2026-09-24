@@ -624,10 +624,10 @@ textarea {
 }
 
 /* ---------- Live PlayHQ widget ---------- */
-/* Progressive enhancement in front of the .playhq-card link-out above: if
-   assets/js/playhq.js can't reach the Worker (or the Worker can't reach
-   PlayHQ), this whole block just stays hidden and the link-out card is the
-   only thing anyone sees -- see worker/README.md. */
+/* Progressive enhancement: if assets/js/playhq.js can't reach the Worker
+   (or the Worker can't reach PlayHQ), these blocks just stay hidden and
+   the #playhq-fallback message is what a visitor sees instead -- see
+   worker/README.md. */
 
 .playhq-widget[hidden] { display: none; }
 
@@ -636,6 +636,33 @@ textarea {
   font-size: 0.9rem;
   margin: 10px 0 0;
 }
+
+.playhq-widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.playhq-widget-header h3 { margin: 0; }
+
+.calendar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--kats-green);
+  border: 1px solid var(--kats-green);
+  border-radius: 999px;
+  padding: 6px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.calendar-link:hover { background: var(--kats-green); color: var(--paper); }
+.calendar-link svg { width: 15px; height: 15px; flex-shrink: 0; }
 
 /* On the dark homepage card, match its own text treatment instead of the
    default ink-soft (too low-contrast on the green gradient background). */
